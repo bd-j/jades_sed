@@ -79,8 +79,9 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
 
     # adjust priors
     model_params["dust2"]["prior"] = priors.TopHat(mini=0.0, maxi=2.0)
-    model_params["tau"]["prior"] = priors.LogUniform(mini=1e-1, maxi=10)
-    model_params["mass"]["prior"] = priors.LogUniform(mini=1e6, maxi=1e10)
+    model_params["logzsol"]["prior"] = priors.TopHat(mini=-2.1, maxi=0.25)
+    model_params["tau"]["prior"] = priors.LogUniform(mini=1e-2, maxi=10)
+    model_params["mass"]["prior"] = priors.LogUniform(mini=1e7, maxi=1e11)
 
     # --- Smoothing ---
     # parameters required to smooth the nebular lines correctly
@@ -178,10 +179,10 @@ class JadesSpecBasis(CSPSpecBasis):
 
         # Add nebular lines (note they are assumed normalized for one solar
         # mass here, for tabular SFHs need to divide out total mass)
-        libres = self.params.get("library_resolution", [500])[0]
-        sublibres = self.params.get("sublibres", [False])[0]
-        lines_added = (self.params.get("nebemlineinspec", [True])[0] &
-                       self.params.get("add_neb_emission", [True])[0])
+        libres = np.atleast_1d(self.params.get("library_resolution", [500]))[0]
+        sublibres = np.atleast_1d(self.params.get("sublibres", [False]))[0]
+        lines_added = (np.atleast_1d(self.params.get("nebemlineinspec", [True]))[0] &
+                       np.atleast_1d(self.params.get("add_neb_emission", [True]))[0])
         if (libres > 0) & (~lines_added):
             linelum = self.ssp.emline_luminosity
             if linelum.ndim > 1:
@@ -277,7 +278,7 @@ def build_sps(zcontinuous=1, compute_vega_mags=False,
 # --------------
 
 def build_obs(objid=0, datafile="", seed=0, sps=None,
-              fullspec=False, **kwargs):
+              fullspec=False, sgroup="DEEP_R100_withSizes", **kwargs):
     """Load spectrum from a FITS file
 
     :param specfile:
@@ -292,7 +293,7 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
     from prospect.utils.obsutils import fix_obs
 
     # Get BEAGLE parameters and S/N for this object
-    wave, snr, bcat = get_beagle(objid, datafile=datafile)
+    wave, snr, bcat = get_beagle(objid, datafile=datafile, sgroup=sgroup)
     fsps_pars = beagle_to_fsps(bcat)
     if sps is None:
         sps = build_sps(object_redshift=bcat["redshift"], **kwargs)
@@ -327,7 +328,7 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
             "filters": None,
             "maggies": None,
             "added_noise": noise,
-            "object_redshift": bcat["redshift"][0],
+            "object_redshift": bcat["redshift"],
             "object_id": objid}
 
     mock["input_params"] = deepcopy(fsps_pars)
@@ -350,9 +351,9 @@ def beagle_to_fsps(beagle):
     fpars["tau"] = 10**(beagle["tau"] - 9)
     fpars["logzsol"] = beagle["metallicity"]
     # Dust
-    mu, tveff = 0.3, beagle["tauV_eff"]
+    mu, tveff = 0.4, beagle["tauV_eff"]
     fpars["dust2"] = mu * tveff
-    fpars["dust_ratio"] = 2.33
+    fpars["dust_ratio"] = 1.5
     # Neb
     fpars["gas_logu"] = beagle["nebular_logU"]
     fpars["gas_logz"] = beagle["metallicity"]
@@ -363,14 +364,14 @@ def beagle_to_fsps(beagle):
 def get_beagle(idx, datafile="", sgroup="BEAGLE_DEEP_R100_withSizes"):
     import h5py
     with h5py.File(datafile, "r") as data:
-        cat = data[str(idx)]["beagle_parameters"][:]
+        cat = data[str(idx)]["beagle_parameters"][()]
         try:
             sdat = data[str(idx)][sgroup]
             #spec = sdat["fnu_noiseless"][:]
             wave = sdat["wl"][:] * 1e4
             snr = sdat["sn"][:]
         except:
-            print("Could not find unique spec for {}".format(idx))
+            #print("Could not find unique spec for {}".format(idx))
             wave = None
             #spec = None
             snr = 100
@@ -406,6 +407,8 @@ if __name__ == '__main__':
     parser.add_argument('--fullspec', action="store_true",
                         help="If set, generate the full wavelength array.")
     parser.add_argument('--smoothssp', default=True,
+                        type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
+    parser.add_argument('--sublibres', default=True,
                         type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
     parser.add_argument('--add_duste', action="store_true",
                         help="If set, add dust emission to the model.")

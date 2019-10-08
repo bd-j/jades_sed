@@ -23,12 +23,14 @@ if __name__ == '__main__':
     # - Parser with default arguments -
     parser = prospect_args.get_parser()
     # - Add custom arguments -
-    parser.add_argument('--add_neb', action="store_true",
-                        help="If set, add nebular emission in the model (and mock).")
-    parser.add_argument('--smoothssp', default=False,
-                        type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
     parser.add_argument('--add_duste', action="store_true",
                         help="If set, add dust emission to the model.")
+    parser.add_argument('--add_neb', action="store_true",
+                        help="If set, add nebular emission in the model (and mock).")
+    parser.add_argument('--fullspec', action="store_true",
+                        help="If set, generate the full wavelength array.")
+    parser.add_argument('--smoothssp', default=False,
+                        type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
     parser.add_argument('--datadir', type=str, default="/Users/bjohnson/Projects/jades_d2s5/data/",
                         help="location of the beagle parameters and S/N curves")
     parser.add_argument('--seed', type=int, default=101,
@@ -52,10 +54,11 @@ if __name__ == '__main__':
     run_params["sps_libraries"] = [uni(l) for l in sps.ssp.libraries]
 
     tag = args.outroot + "_{}_{}".format(*run_params["sps_libraries"])
+    hfile = tag + ".h5"
 
-    nobj = 10
+    #nobj = 10
     object_ids = np.arange(nobj)
-    with h5py.File(tag + ".h5", "x") as out:
+    with h5py.File(hfile, "x") as out:
         for objid in object_ids:
             obj = out.create_group(str(objid))
 
@@ -72,13 +75,17 @@ if __name__ == '__main__':
                 for c in bdat.dtype.names:
                     d = bspec.create_dataset(c, data=bdat[c])
 
-    run_params["datafile"] = tag + ".h5"
+    run_params["datafile"] = hfile
 
-    with h5py.File(tag + ".h5", "a") as out:
+    with h5py.File(hfile, "a") as out:
         for objid in object_ids:
-            obj = out.create_group(str(objid))
+            obj = out[str(objid)]
+
             # Generate spectrum
-            obs = build_obs(objid=objid, sps=sps, **run_params)
+            try:
+                obs = build_obs(objid=objid, sps=sps, **run_params)
+            except(AssertionError):
+                print("parameters for {} out of prior range".format(objid))
 
             # Store spectrum
             try:
@@ -91,5 +98,7 @@ if __name__ == '__main__':
             pspec.attrs["libraries"] = run_params["sps_libraries"]
             pspec.attrs["object_redshift"] = obs["object_redshift"]
             pspec.attrs["seed"] = args.seed
-            for k, v in obs["input_params"].items():
+            pspec.attrs["wave_units"] = "angstroms"
+            pspec.attrs["flux_units"] = "maggies"
+            for k, v in obs["model_params"].items():
                 pspec.attrs[k] = v

@@ -4,7 +4,7 @@ First we use `genspec_parametric` to generate an intrinsic (native library
 resolution) spectrum for each object.  This will create an HDF5 file with a group for each object ID and subgroups corresponding to the BEAGLE parameters, the size information, and the intrinsic native resolution fsps spectrum.
 
 ```bash
-python genspec_parametric.py --add_neb --smoothssp=False --fullspec --outroot=parametric_fsps
+python genspec_parametric.py --add_neb --smoothssp=False --fullspec --outroot=parametric
 ```
 
 Setting `smoothssp=False --fullspec` ensures that the spectra are at the native library resolution with the full spectral range.  The isochrone and stellar library names will be appended to the end of `outroot`
@@ -18,7 +18,7 @@ These S/N estimates can incorporate size information (and hence slit losses) or
 not.  Note that because pandeia does not account for input library spectral resolution when convolving with the line spread funct, the output spectra will be broader than reality and the S/N estimates will be approximate.  Note also that pandeia accounts for undersampling of the LSF in a way that we do not.
 
 ```bash
-python fsps_output_to_pandeia --size_file=<X> --hdf5_catalog=<Y>
+python fsps_output_to_pandeia.py --spectrum_file=parametric_mist_ckc14.h5 --use_sizes --nobj=5000
 ```
 
 

@@ -14,13 +14,9 @@ c_light = 2.99792e18  # Ang/s
 #This script was adapted from a short script written by Michael Maseda
 #demonstrating how to set up emission line S/N calculations in pandeia.
 
-# Input spectrum file has format
-#[FULL SED WL] (nw,)     in Angstroms
-#[FULL SED] (nobj, nw)   in erg/s/cm^2/A
-#[GALAXY PROPERTIES] (nobj,), structured with
-#   "redshift",
-
-exposureDict = {'DEEP':{'clear':{'ngroup':19,'nint':2,'nexp':36}}}
+exposureDict = {'DEEP':{'clear':{'ngroup':19,'nint':2,'nexp':36}}
+                #'MEDIUM':{'clear':{'ngroup':13,'nint':1,'nexp':9}},
+                }
 #exposureDict = {'DEEP':{'clear':{'ngroup':19,'nint':2,'nexp':36},'f070lp':{'ngroup':19,'nint':2,'nexp':9},'f100lp':{'ngroup':19,'nint':2,'nexp':9},'f170lp':{'ngroup':19,'nint':2,'nexp':9},'f290lp':{'ngroup':19,'nint':2,'nexp':9}},\
 #                'MEDIUM':{'clear':{'ngroup':13,'nint':1,'nexp':9},'f070lp':{'ngroup':13,'nint':1,'nexp':9},'f100lp':{'ngroup':13,'nint':1,'nexp':9},'f170lp':{'ngroup':13,'nint':1,'nexp':9},'f290lp':{'ngroup':13,'nint':1,'nexp':9}},\
 #                'MEDIUM_HST':{'clear':{'ngroup':16,'nint':1,'nexp':6},'f070lp':{'ngroup':13,'nint':1,'nexp':6},'f100lp':{'ngroup':13,'nint':1,'nexp':6},'f170lp':{'ngroup':13,'nint':1,'nexp':6},'f290lp':{'ngroup':16,'nint':1,'nexp':6}},\
@@ -99,19 +95,21 @@ def get_pro_input(iobj, args):
 
     sizes : A structured array
     """
+    sizes = None
+
     with h5py.File(args.spectrum_file, "r") as f:
         cat = f[str(iobj)]["prospector_intrinsic"]
         wl = cat["wavelength"][:]
         spec = cat["spectrum"][:]
         z = cat.attrs["object_redshift"]
-
-    sizes = None
-    if args.sizes_file != "":
-        sizes = fits.open(args.sizes_file)[1].data
+        if args.use_sizes:
+            sizes = f[str(iobj)]["jaguar_parameters"][()]
 
     # convert from maggies to mJy
+    #assert cat.attrs["flux_units"] == "maggies"
     tempSpec = spec * 3631 * 1e3
     # AA to micron
+    #assert cat.attrs["wave_units"] == "angstroms"
     tempWl = wl / 1e4
 
     return z, tempWl, tempSpec, sizes
@@ -120,10 +118,10 @@ def get_pro_input(iobj, args):
 def build_input(iobj, args):
 
     # get redshifted intrinsic spectrum
-    try:
-        z, tempWl, tempSpec, sizes = get_beagle_input(iobj, args)
-    except:
-        z, tempWl, tempSpec, sizes = get_pro_input(iobj, args)
+    #try:
+    #    z, tempWl, tempSpec, sizes = get_beagle_input(iobj, args)
+    #except:
+    z, tempWl, tempSpec, sizes = get_pro_input(iobj, args)
 
     inputs = {"wl": tempWl, "spec": tempSpec,
               "xoff": 0, "yoff": 0,
@@ -133,14 +131,14 @@ def build_input(iobj, args):
               "slitletShape": [[0, -1], [0, 0], [0, 1]],
               "ID": iobj}
     if sizes is not None:
-        inputs['axis_ratio'] = sizes['axis_ratio'][iobj]
-        inputs['sersic_n'] = sizes['sersic_n'][iobj]
-        inputs['position_angle'] = sizes['position_angle'][iobj]
-        inputs['re_circ'] = (sizes['Re_maj'][iobj] *
-                             np.sqrt(sizes['axis_ratio'][iobj])
+        inputs['axis_ratio'] = sizes['axis_ratio']
+        inputs['sersic_n'] = sizes['sersic_n']
+        inputs['position_angle'] = sizes['position_angle']
+        inputs['re_circ'] = (sizes['Re_maj'] *
+                             np.sqrt(sizes['axis_ratio'])
                              )
-        if 'ID' in sizes.dtype.names:
-            inputs["ID"] = sizes["ID"][iobj]
+        #if 'ID' in sizes.dtype.names:
+        #    inputs["ID"] = sizes["ID"]
 
     return inputs, z
 
@@ -149,14 +147,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--spectrum_file", type=str, default="")
-    parser.add_argument("--sizes_file", type=str, default="")
-    parser.add_argument("--hdf5_catalog", type=str, default="")
+    parser.add_argument("--use_sizes", action="store_true")
+    parser.add_argument("--write_fits_spectrum", action="store_true")
     parser.add_argument("--nobj", type=int, default=-99)
     parser.add_argument("--output_folder", default=".")
     args = parser.parse_args()
 
     assert os.path.exists(args.output_folder)
-    hfile = args.hdf5_catalog
+    hfile = args.spectrum_file
 
     for iobj in range(args.nobj):
 
@@ -165,12 +163,15 @@ if __name__ == "__main__":
         # for each of the filter/grating configurations
         for exp in exposureDict.keys():
             for filt in exposureDict[exp].keys():
-                print(filt)
-                report = sn_user_spec(inputs, disperser=filterDict[filt],
-                                      filt=filt,
-                                      ngroup=exposureDict[exp][filt]['ngroup'],
-                                      nint=exposureDict[exp][filt]['nint'],
-                                      nexp=exposureDict[exp][filt]['nexp'])
+                try:
+                    report = sn_user_spec(inputs, disperser=filterDict[filt],
+                                          filt=filt,
+                                          ngroup=exposureDict[exp][filt]['ngroup'],
+                                          nint=exposureDict[exp][filt]['nint'],
+                                          nexp=exposureDict[exp][filt]['nexp'])
+                except:
+                    print("Could not generate pandeia report for {}".format(iobj))
+                    continue
                 snr = report['1d']['sn'][1]
                 spec = report['1d']['target'][1]
                 unc = spec / snr
@@ -204,25 +205,36 @@ if __name__ == "__main__":
                 else:
                     tag = "{}_{}".format(exp, "R1000")
 
-                if args.sizes_file != "":
+                if args.use_sizes:
                     tag += "_withSizes"
 
                 # Write to h5py
                 if hfile != "":
-                    with h5py.open(hfile, "rw") as hcat:
-                        group = hcat[str(iobj)].create_group(tag)
+                    with h5py.File(hfile, "r+") as hcat:
+                        try:
+                            group = hcat[str(iobj)].create_group(tag)
+                        except(ValueError, NameError):
+                            del hcat[str(iobj)][tag]
+                            group = hcat[str(iobj)].create_group(tag)
                         group.attrs["snr_line"] = sn
+                        group.attrs["filter"] = filt
+                        group.attrs["grating"] = filterDict[filt]
+                        group.attrs["wave_units"] = "micron"
+                        group.attrs["flux_units"] = "mJy"
                         for k, v in outputDict.items():
                             d = group.create_dataset(k, data=v)
 
                 if sn < 3:
                     pass
-                folder = os.path.join(args.output_folder, tag)
-                os.makedirs(folder, exist_ok=True)
-                #idStr = "{:04.0f}".format(int(inputs["ID"]))
-                idStr = "{:.0f}".format(int(inputs["ID"]))
-                outName = idStr+'_'+filt+'_'+filterDict[filt]+'_extended.fits'
-                outputFile = os.path.join(folder, outName)
-                print(outputFile)
-                outputTable = Table(outputDict)
-                outputTable.write(outputFile, overwrite=True)
+                elif args.write_fits_spectrum:
+                    folder = os.path.join(args.output_folder, tag)
+                    os.makedirs(folder, exist_ok=True)
+                    #idStr = "{:04.0f}".format(int(inputs["ID"]))
+                    idStr = "{:.0f}".format(int(inputs["ID"]))
+                    outName = idStr+'_'+filt+'_'+filterDict[filt]
+                    if args.use_sizes:
+                        outName += '_extended.fits'
+                    outputFile = os.path.join(folder, outName)
+                    print(outputFile)
+                    outputTable = Table(outputDict)
+                    outputTable.write(outputFile, overwrite=True)
