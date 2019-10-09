@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""Script to fit a NIRSPEC R=100 (PRISM) spectrum of a high-z galaxy
+"""Script to fit a NIRSPEC R=100 (PRISM) spectrum of a high-z
+galaxy with a delay-tau SFH and BEAGLE-like parameters
 """
 
 import time, sys, glob
@@ -23,7 +24,7 @@ from prospect.sources.constants import cosmo, jansky_cgs, lightspeed
 try:
     from astropy.io import fits
     nirspec_lsf_file = "/Users/bjohnson/Projects/jades_d2s5/data/jwst_nirspec_prism_disp.fits"
-    prism_lsf = np.array(fits.getdata(nirspec_lsf_file))
+    nirspec_lsf_table = np.array(fits.getdata(nirspec_lsf_file))
 except:
     pass
 
@@ -84,10 +85,6 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     model_params["mass"]["prior"] = priors.LogUniform(mini=1e7, maxi=1e11)
 
     # --- Smoothing ---
-    # parameters required to smooth the nebular lines correctly
-    model_params["library_resolution"] = {"N": 1, "isfree": False,
-                                          "init": library_resolution}
-    model_params["sublibres"] = {"N": 1, "isfree": False, "init": sublibres}
     if smoothstars:
         model_params.update(TemplateLibrary["spectral_smoothing"])
 
@@ -130,25 +127,9 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     return model
 
 
-def nirspec_lsf(observed_wave, nirspec_prism_lsf=prism_lsf,
-                library_resolution=500, sublibres=False,
-                **extras):
-    """Get sigma(lambda_observed) for NIRSPEC PRISM. (units of \AA)
-    """
-    lwave = nirspec_prism_lsf["WAVELENGTH"] * 1e4
-    sig = lwave / nirspec_prism_lsf["R"] / sigma_to_fwhm
-    if sublibres & (library_resolution > 0):
-        libsig = lwave / library_resolution / sigma_to_fwhm
-    else:
-        libsig = 0
-    sig = np.clip(np.sqrt(sig**2 - libsig**2), 0, np.inf)
-    sigma = np.interp(observed_wave, lwave, sig)
-    return sigma
-
 # --------------
 # SPS Object
 # --------------
-
 
 def lineprofile(wave, linewave, linelum, sigma):
     """Lay down multiple gaussians (in velocity) on the given wave-axis.
@@ -170,6 +151,25 @@ def lineprofile(wave, linewave, linelum, sigma):
 
 class JadesSpecBasis(CSPSpecBasis):
 
+    def line_spread(self, observed_wave):
+        """
+        :param observed_wave: array-like, shape(nw,)
+            Observed wavelengths in Angstroms
+
+        :returns sigma: array-like, shape(nw,)
+            The dispersion of the gaussian linespread function, in AA at each of
+            the supplied wavelengths.
+        """
+        lwave = self.lsf_table["WAVELENGTH"] * 1e4
+        sig = lwave / self.lsf_table["R"] / sigma_to_fwhm
+        if self.sublibres & (self.library_resolution > 0):
+            libsig = lwave / self.library_resolution / sigma_to_fwhm
+        else:
+            libsig = 0
+        sig = np.clip(np.sqrt(sig**2 - libsig**2), 0, np.inf)
+        return np.interp(observed_wave, lwave, sig)
+
+
     def get_spectrum(self, outwave=None, filters=None, **params):
         # Spectrum in Lsun/Hz per solar mass formed, restframe
         wave, spectrum, mfrac = self.get_galaxy_spectrum(**params)
@@ -179,25 +179,25 @@ class JadesSpecBasis(CSPSpecBasis):
 
         # Add nebular lines (note they are assumed normalized for one solar
         # mass here, for tabular SFHs need to divide out total mass)
-        libres = np.atleast_1d(self.params.get("library_resolution", [500]))[0]
-        sublibres = np.atleast_1d(self.params.get("sublibres", [False]))[0]
         lines_added = (np.atleast_1d(self.params.get("nebemlineinspec", [True]))[0] &
                        np.atleast_1d(self.params.get("add_neb_emission", [True]))[0])
-        if (libres > 0) & (~lines_added):
+        if (~lines_added):
             linelum = self.ssp.emline_luminosity
             if linelum.ndim > 1:
                 # tabular sfh
                 linelum = linelum[0] / mass
             linewave = self.ssp.emline_wavelengths
+            # This is the line width at the library resolution
+            sigma_v = ckms / self.library_resolution / sigma_to_fwhm
             # Use the linespread function if it was done for the stars
             if self.ssp.params["smooth_lsf"]:
-                sigma_lsf = nirspec_lsf(linewave * a, sublibres=sublibres,
-                                        library_resolution=libres)
-                sigma_v = ckms * sigma_lsf / (linewave * a)
-            else:
-                sigma_v = ckms / libres / sigma_to_fwhm
-            linespec = lineprofile(wave, linewave, linelum, sigma_v)
-            spectrum += linespec
+                sigma_lsf = self.line_spread(linewave * a)
+                sv_lsf = ckms * sigma_lsf / (linewave * a)
+                sigma_v = np.hypot(sigma_v, sv_lsf)
+
+            # could restrict to relevant lines here....
+            self._linespec = lineprofile(wave, linewave, linelum, sigma_v)
+            spectrum += self._linespec
 
         # Redshifting + Wavelength solution
         # We do it ourselves.
@@ -250,20 +250,28 @@ class JadesSpecBasis(CSPSpecBasis):
 
 def build_sps(zcontinuous=1, compute_vega_mags=False,
               object_redshift=None, smoothssp=False, library_resolution=500,
-              sublibres=False, **extras):
+              sublibres=False, lsf_file="", **extras):
 
     sps = JadesSpecBasis(zcontinuous=zcontinuous,
                          compute_vega_mags=compute_vega_mags)
+
+    # Add the data necessary for the lsf smoothing
     assert sps.ssp.libraries[1] == b"ckc14"
+    sps.library_resolution = library_resolution
+    sps.sublibres = sublibres
+    if lsf_file == "":
+        sps.lsf_table = nirspec_lsf_table
+    else:
+        sps.lsf_table = np.array(fits.getdata(lsf_file))
 
     # Do LSF smoothing at the ssp level?
     # Faster but need to know object redshift
+    print(object_redshift)
     if smoothssp:
         from astropy.io import fits
         w = sps.ssp.wavelengths
         wa = w * (1 + object_redshift)
-        sigma = nirspec_lsf(wa, library_resolution=library_resolution,
-                            sublibres=sublibres)
+        sigma = sps.line_spread(wa)
         sigma_v = ckms * sigma / wa
         good = (wa > 0.5e4) & (wa < 10e4)
         sps.ssp.params['smooth_lsf'] = True
@@ -361,7 +369,7 @@ def beagle_to_fsps(beagle):
     return fpars
 
 
-def get_beagle(idx, datafile="", sgroup="BEAGLE_DEEP_R100_withSizes"):
+def get_beagle(idx, datafile="", sgroup="DEEP_R100_withSizes"):
     import h5py
     with h5py.File(datafile, "r") as data:
         cat = data[str(idx)]["beagle_parameters"][()]
@@ -393,8 +401,9 @@ def build_all(**kwargs):
 
     obs = build_obs(**kwargs)
     model = build_model(object_redshift=obs["object_redshift"], **kwargs)
+    sps = build_sps(object_redshift=obs["object_redshift"], **kwargs)
 
-    return obs, model, build_sps(**kwargs), build_noise(**kwargs)
+    return obs, model, sps, build_noise(**kwargs)
 
 
 if __name__ == '__main__':
@@ -402,6 +411,8 @@ if __name__ == '__main__':
     # - Parser with default arguments -
     parser = prospect_args.get_parser()
     # - Add custom arguments -
+    parser.add_argument('--add_duste', action="store_true",
+                        help="If set, add dust emission to the model.")
     parser.add_argument('--add_neb', action="store_true",
                         help="If set, add nebular emission in the model (and mock).")
     parser.add_argument('--fullspec', action="store_true",
@@ -410,15 +421,15 @@ if __name__ == '__main__':
                         type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
     parser.add_argument('--sublibres', default=True,
                         type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
-    parser.add_argument('--add_duste', action="store_true",
-                        help="If set, add dust emission to the model.")
+    parser.add_argument('--lsf_file', type=str, default=(""),
+                        help="File with the LSF data to use when smoothing SSPs")
     parser.add_argument('--objid', type=int, default=0,
                         help="zero-index row number in the table to fit.")
     parser.add_argument('--datafile', type=str,
                         default=("/Users/bjohnson/Projects/jades_d2s5/data/"
                                  "noisy_spectra/parametric_mist_ckc14.h5"),
                         help="File with beagle parameters and S/N curves")
-    parser.add_argument("--sgroup", type="str", default="DEEP_R100_withSizes",
+    parser.add_argument("--sgroup", type=str, default="DEEP_R100_withSizes",
                         help=("The type of pandeia mock to use for the wavelength"
                               " vector and S/N curve"))
     parser.add_argument('--seed', type=int, default=101,
