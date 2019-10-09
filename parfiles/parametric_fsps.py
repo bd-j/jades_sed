@@ -40,18 +40,24 @@ def uni(x):
 
 
 def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
-                object_redshift=None, prism_lsf=prism_lsf, smoothssp=False,
-                library_resolution=500, **extras):
+                object_redshift=None, library_resolution=500, sublibres=False,
+                smoothstars=False, **extras):
     """Construct a model.  This method defines a number of parameter
     specification dictionaries and uses them to initialize a
     `models.sedmodel.SedModel` object.
 
-    :param add_duste: (optional, default: False)
-        Switch to add (fixed) parameters relevant for dust emission.
+    :param add_duste: (optional, default: False) Switch to add (fixed)
+        parameters relevant for dust emission.
 
-    :param add_neb: (optional, default: False)
-        Switch to add (fixed) parameters relevant for nebular emission, and
-        turn nebular emission on.
+    :param add_neb: (optional, default: False) Switch to add (fixed) parameters
+        relevant for nebular emission, and turn nebular emission on.
+
+    :param smoothstars:
+        If True, smooth the spectrum by a velocity dispersion given by the sigma_smooth parameter
+
+    :param object_redshift: (optional, float)
+        If supplied, fix the redshift to this number
+
     """
     from prospect.models.templates import TemplateLibrary
     from prospect.models import priors, sedmodel, transforms
@@ -73,30 +79,19 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
 
     # adjust priors
     model_params["dust2"]["prior"] = priors.TopHat(mini=0.0, maxi=2.0)
-    model_params["tau"]["prior"] = priors.LogUniform(mini=1e-1, maxi=10)
-    model_params["mass"]["prior"] = priors.LogUniform(mini=1e6, maxi=1e10)
+    model_params["logzsol"]["prior"] = priors.TopHat(mini=-2.1, maxi=0.25)
+    model_params["tau"]["prior"] = priors.LogUniform(mini=1e-2, maxi=10)
+    model_params["mass"]["prior"] = priors.LogUniform(mini=1e7, maxi=1e11)
 
-    # --- NIRSPEC PRISM smoothing ---
-    model_params["library_resolution"] = {"N": 1, "isfree": False, 
+    # --- Smoothing ---
+    # parameters required to smooth the nebular lines correctly
+    model_params["library_resolution"] = {"N": 1, "isfree": False,
                                           "init": library_resolution}
-    if (prism_lsf is not None) & (~smoothssp):
+    model_params["sublibres"] = {"N": 1, "isfree": False, "init": sublibres}
+    if smoothstars:
         model_params.update(TemplateLibrary["spectral_smoothing"])
-        model_params["fftsmooth"]["init"] = False
-        model_params["smoothtype"]["init"] = "lsf"
-        model_params["sigma_smooth"]["init"] = None
-        model_params["sigma_smooth"]["isfree"] = False
-        model_params["lsf_function"] = {"isfree": False, "init": nirspec_lsf}        
-        #model_params["nirspec_prism_lsf"] = {"isfree": False, "init": prism_lsf}
 
-    # --- Optional bells ---
-    # Metallicity
-    if fixed_metallicity is not None:
-        # make it a fixed parameter
-        model_params["logzsol"]["isfree"] = False
-        #And use value supplied by fixed_metallicity keyword
-        model_params["logzsol"]['init'] = fixed_metallicity
-
-    # Redshift
+    # Fix Redshift?
     if object_redshift != 0.0:
         # make sure zred is fixed
         model_params["zred"]['isfree'] = False
@@ -106,6 +101,14 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
         maxage = cosmo.age(object_redshift).to_value("Gyr")
         tprior = priors.TopHat(mini=0.001, maxi=maxage)
         model_params["tage"]["prior"] = tprior
+
+    # --- Optional bells ---
+    # Metallicity
+    if fixed_metallicity is not None:
+        # make it a fixed parameter
+        model_params["logzsol"]["isfree"] = False
+        #And use value supplied by fixed_metallicity keyword
+        model_params["logzsol"]['init'] = fixed_metallicity
 
     # Dust emission
     if add_duste:
@@ -127,13 +130,17 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     return model
 
 
-def nirspec_lsf(observed_wave, library_resolution=500, 
-                nirspec_prism_lsf=prism_lsf, **extras):
+def nirspec_lsf(observed_wave, nirspec_prism_lsf=prism_lsf,
+                library_resolution=500, sublibres=False,
+                **extras):
     """Get sigma(lambda_observed) for NIRSPEC PRISM. (units of \AA)
     """
     lwave = nirspec_prism_lsf["WAVELENGTH"] * 1e4
     sig = lwave / nirspec_prism_lsf["R"] / sigma_to_fwhm
-    libsig = lwave / library_resolution / sigma_to_fwhm
+    if sublibres & (library_resolution > 0):
+        libsig = lwave / library_resolution / sigma_to_fwhm
+    else:
+        libsig = 0
     sig = np.clip(np.sqrt(sig**2 - libsig**2), 0, np.inf)
     sigma = np.interp(observed_wave, lwave, sig)
     return sigma
@@ -141,6 +148,7 @@ def nirspec_lsf(observed_wave, library_resolution=500,
 # --------------
 # SPS Object
 # --------------
+
 
 def lineprofile(wave, linewave, linelum, sigma):
     """Lay down multiple gaussians (in velocity) on the given wave-axis.
@@ -165,23 +173,34 @@ class JadesSpecBasis(CSPSpecBasis):
     def get_spectrum(self, outwave=None, filters=None, **params):
         # Spectrum in Lsun/Hz per solar mass formed, restframe
         wave, spectrum, mfrac = self.get_galaxy_spectrum(**params)
+        zred = self.params.get('zred', 0.0)
+        a = 1 + zred
+        mass = np.sum(self.params.get('mass', 1.0))
 
         # Add nebular lines (note they are assumed normalized for one solar
         # mass here, for tabular SFHs need to divide out total mass)
-        lineres = params.get("library_resolution", [500])
-        lines_added = params.get("nebemlineinspec", True)
-        if (lineres[0] > 0) & (~lines_added[0]):
+        libres = np.atleast_1d(self.params.get("library_resolution", [500]))[0]
+        sublibres = np.atleast_1d(self.params.get("sublibres", [False]))[0]
+        lines_added = (np.atleast_1d(self.params.get("nebemlineinspec", [True]))[0] &
+                       np.atleast_1d(self.params.get("add_neb_emission", [True]))[0])
+        if (libres > 0) & (~lines_added):
             linelum = self.ssp.emline_luminosity
             if linelum.ndim > 1:
-                linelum = linelum[0]
+                # tabular sfh
+                linelum = linelum[0] / mass
             linewave = self.ssp.emline_wavelengths
-            sigma_v = ckms / lineres / sigma_to_fwhm
+            # Use the linespread function if it was done for the stars
+            if self.ssp.params["smooth_lsf"]:
+                sigma_lsf = nirspec_lsf(linewave * a, sublibres=sublibres,
+                                        library_resolution=libres)
+                sigma_v = ckms * sigma_lsf / (linewave * a)
+            else:
+                sigma_v = ckms / libres / sigma_to_fwhm
             linespec = lineprofile(wave, linewave, linelum, sigma_v)
             spectrum += linespec
 
         # Redshifting + Wavelength solution
         # We do it ourselves.
-        a = 1 + params.get('zred', 0)
         wa, sa = wave * a, spectrum * a  # Observed Frame
         if outwave is None:
             outwave = wa
@@ -208,7 +227,6 @@ class JadesSpecBasis(CSPSpecBasis):
             smspec = sa
 
         # Distance dimming and unit conversion
-        zred = self.params.get('zred', 0.0)
         if (zred == 0) or ('lumdist' in self.params):
             # Use 10pc for the luminosity distance (or a number
             # provided in the dist key in units of Mpc)
@@ -223,7 +241,6 @@ class JadesSpecBasis(CSPSpecBasis):
         phot /= dfactor
 
         # Mass normalization
-        mass = np.sum(self.params.get('mass', 1.0))
         if np.all(self.params.get('mass_units', 'mformed') == 'mstar'):
             # Convert input normalization units from current stellar mass to mass formed
             mass /= mfrac
@@ -231,9 +248,9 @@ class JadesSpecBasis(CSPSpecBasis):
         return smspec * mass, phot * mass, mfrac
 
 
-def build_sps(zcontinuous=1, compute_vega_mags=False, smoothssp=False,
-              object_redshift=None, library_resolution=500,
-              lsf_file=nirspec_lsf_file, **extras):
+def build_sps(zcontinuous=1, compute_vega_mags=False,
+              object_redshift=None, smoothssp=False, library_resolution=500,
+              sublibres=False, **extras):
 
     sps = JadesSpecBasis(zcontinuous=zcontinuous,
                          compute_vega_mags=compute_vega_mags)
@@ -243,14 +260,15 @@ def build_sps(zcontinuous=1, compute_vega_mags=False, smoothssp=False,
     # Faster but need to know object redshift
     if smoothssp:
         from astropy.io import fits
-        prism_lsf = np.array(fits.getdata(lsf_file))
         w = sps.ssp.wavelengths
         wa = w * (1 + object_redshift)
         sigma = nirspec_lsf(wa, library_resolution=library_resolution,
-                            nirspec_prism_lsf=prism_lsf)
+                            sublibres=sublibres)
+        sigma_v = ckms * sigma / wa
+        good = (wa > 0.5e4) & (wa < 10e4)
         sps.ssp.params['smooth_lsf'] = True
-        sps.ssp.params["smooth_velocity"] = False
-        sps.ssp.set_lsf(wave, sigma)
+        sps.ssp.params["smooth_velocity"] = True
+        sps.ssp.set_lsf(w[good], sigma_v[good])
 
     return sps
 
@@ -259,8 +277,8 @@ def build_sps(zcontinuous=1, compute_vega_mags=False, smoothssp=False,
 # Observational Data
 # --------------
 
-def build_obs(objid=0, datadir="", seed=0, sps=None,
-              prism_lsf=prism_lsf, **kwargs):
+def build_obs(objid=0, datafile="", seed=0, sps=None,
+              fullspec=False, sgroup="DEEP_R100_withSizes", **kwargs):
     """Load spectrum from a FITS file
 
     :param specfile:
@@ -275,23 +293,22 @@ def build_obs(objid=0, datadir="", seed=0, sps=None,
     from prospect.utils.obsutils import fix_obs
 
     # Get BEAGLE parameters and S/N for this object
-    bwave, snr, bcat, _ = get_beagle(objid, datadir=datadir)
+    wave, snr, bcat = get_beagle(objid, datafile=datafile, sgroup=sgroup)
     fsps_pars = beagle_to_fsps(bcat)
     if sps is None:
         sps = build_sps(object_redshift=bcat["redshift"], **kwargs)
 
     # Barebones obs dictionary,
-    # set to nirspec wavelength points if lsf is supplied.
-    fullspec = prism_lsf is None
+    # use the full output wavelength array if `fullspec`
     if fullspec:
-        bwave = sps.ssp.wavelengths
+        wave = sps.ssp.wavelengths
         snr = 1000
     else:
-        assert bwave is not None
-    obs = {"wavelength": bwave, "spectrum": None, "filters": None}
+        assert wave is not None
+    obs = {"wavelength": wave, "spectrum": None, "filters": None}
 
     # now get a model, set it to the beagle values, and compute
-    model = build_model(object_redshift=bcat["redshift"], prism_lsf=prism_lsf, **kwargs)
+    model = build_model(object_redshift=bcat["redshift"], **kwargs)
     model.params.update(fsps_pars)
     assert np.isfinite(model.prior_product(model.theta))
 
@@ -311,10 +328,11 @@ def build_obs(objid=0, datadir="", seed=0, sps=None,
             "filters": None,
             "maggies": None,
             "added_noise": noise,
-            "object_redshift": bcat["redshift"][0],
+            "object_redshift": bcat["redshift"],
             "object_id": objid}
 
     mock["input_params"] = deepcopy(fsps_pars)
+    mock["model_params"] = deepcopy(model.params)
 
     obs.update(mock)
     # This ensures all required keys are present
@@ -333,9 +351,9 @@ def beagle_to_fsps(beagle):
     fpars["tau"] = 10**(beagle["tau"] - 9)
     fpars["logzsol"] = beagle["metallicity"]
     # Dust
-    mu, tveff = 0.3, beagle["tauV_eff"]
+    mu, tveff = 0.4, beagle["tauV_eff"]
     fpars["dust2"] = mu * tveff
-    fpars["dust_ratio"] = 2.33
+    fpars["dust_ratio"] = 1.5
     # Neb
     fpars["gas_logu"] = beagle["nebular_logU"]
     fpars["gas_logz"] = beagle["metallicity"]
@@ -343,28 +361,22 @@ def beagle_to_fsps(beagle):
     return fpars
 
 
-def get_beagle(idx, mock_sfh_type="parametric", datadir="", catf=None):
-    from astropy.io import fits
+def get_beagle(idx, datafile="", sgroup="BEAGLE_DEEP_R100_withSizes"):
+    import h5py
+    with h5py.File(datafile, "r") as data:
+        cat = data[str(idx)]["beagle_parameters"][()]
+        try:
+            sdat = data[str(idx)][sgroup]
+            #spec = sdat["fnu_noiseless"][:]
+            wave = sdat["wl"][:] * 1e4
+            snr = sdat["sn"][:]
+        except:
+            #print("Could not find unique spec for {}".format(idx))
+            wave = None
+            #spec = None
+            snr = 100
 
-    if catf is None:
-        stype = mock_sfh_type
-        catf = glob.glob(pjoin(datadir, "noisy_spectra", stype, "*input.fits"))[0]
-    allcat = np.array(fits.getdata(catf))
-    cat = allcat[allcat["ID"] == idx]
-    specf = glob.glob(pjoin(datadir, "noisy_spectra", stype, "DEEP_R100",
-                            "{}_*fits".format(idx)))
-    if len(specf) == 1:
-        bsp = np.array(fits.getdata(specf[0]))
-        spec = bsp["fnu_noiseless"]
-        wave = bsp["wl"] * 1e4
-        snr = bsp["sn"]
-    else:
-        print("Could not find unique spec for {}".format(idx))
-        bsp = None
-        wave = None
-        snr = 100
-
-    return wave, snr, cat, bsp
+    return wave, snr, cat
 
 # -----------------
 # Noise Model
@@ -392,14 +404,23 @@ if __name__ == '__main__':
     # - Add custom arguments -
     parser.add_argument('--add_neb', action="store_true",
                         help="If set, add nebular emission in the model (and mock).")
-    parser.add_argument('--smoothssp', action="store_true",
-                        help="If set, smooth the SSPs before constructing composite spectra.")
+    parser.add_argument('--fullspec', action="store_true",
+                        help="If set, generate the full wavelength array.")
+    parser.add_argument('--smoothssp', default=True,
+                        type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
+    parser.add_argument('--sublibres', default=True,
+                        type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
     parser.add_argument('--add_duste', action="store_true",
                         help="If set, add dust emission to the model.")
     parser.add_argument('--objid', type=int, default=0,
                         help="zero-index row number in the table to fit.")
-    parser.add_argument('--datadir', type=str, default="/Users/bjohnson/Projects/jades_d2s5/data/" ,
-                        help="location of the beagle parameters and S/N curves")
+    parser.add_argument('--datafile', type=str,
+                        default=("/Users/bjohnson/Projects/jades_d2s5/data/"
+                                 "noisy_spectra/parametric_mist_ckc14.h5"),
+                        help="File with beagle parameters and S/N curves")
+    parser.add_argument("--sgroup", type="str", default="DEEP_R100_withSizes",
+                        help=("The type of pandeia mock to use for the wavelength"
+                              " vector and S/N curve"))
     parser.add_argument('--seed', type=int, default=101,
                         help=("RNG seed for the noise. Negative values result"
                               "in random noise."))

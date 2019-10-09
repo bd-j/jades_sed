@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""Use the full resolution ckc library to produce jwst nirspec appropriate R=500 spectra
+"""
+
 import os
 from itertools import product
 

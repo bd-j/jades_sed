@@ -414,8 +414,13 @@ if __name__ == '__main__':
                         help="If set, add dust emission to the model.")
     parser.add_argument('--objid', type=int, default=0,
                         help="zero-index row number in the table to fit.")
-    parser.add_argument('--datadir', type=str, default="/Users/bjohnson/Projects/jades_d2s5/data/" ,
-                        help="location of the beagle parameters and S/N curves")
+    parser.add_argument('--datafile', type=str,
+                        default=("/Users/bjohnson/Projects/jades_d2s5/data/"
+                                 "noisy_spectra/parametric_mist_ckc14.h5"),
+                        help="File with beagle parameters and S/N curves")
+    parser.add_argument("--sgroup", type="str", default="DEEP_R100_withSizes",
+                        help=("The type of pandeia mock to use for the wavelength"
+                              " vector and S/N curve"))
     parser.add_argument('--seed', type=int, default=101,
                         help=("RNG seed for the noise. Negative values result"
                               "in random noise."))

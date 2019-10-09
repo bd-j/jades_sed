@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+"""Convert jwst resolution spectral library from h5 to FSPS
+appropriate binary files
+"""
+
 import glob
 import numpy as np
 import matplotlib.pyplot as pl
