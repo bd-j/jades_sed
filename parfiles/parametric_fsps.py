@@ -10,19 +10,19 @@ from os.path import join as pjoin
 from copy import deepcopy
 
 import numpy as np
-from sedpy.observate import load_filters
+from astropy.io import fits
 
 from prospect import prospect_args
 from prospect.fitting import fit_model
 from prospect.io import write_results as writer
 from prospect.utils.smoothing import sigma_to_fwhm, ckms
 
-from sedpy.observate import getSED
+from sedpy.observate import getSED, load_filters
 from prospect.sources import CSPSpecBasis, to_cgs
 from prospect.sources.constants import cosmo, jansky_cgs, lightspeed
 
+
 try:
-    from astropy.io import fits
     nirspec_lsf_file = "/Users/bjohnson/Projects/jades_d2s5/data/jwst_nirspec_prism_disp.fits"
     nirspec_lsf_table = np.array(fits.getdata(nirspec_lsf_file))
 except:
@@ -82,7 +82,7 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     model_params["dust2"]["prior"] = priors.TopHat(mini=0.0, maxi=2.0)
     model_params["logzsol"]["prior"] = priors.TopHat(mini=-2.1, maxi=0.25)
     model_params["tau"]["prior"] = priors.LogUniform(mini=1e-2, maxi=10)
-    model_params["mass"]["prior"] = priors.LogUniform(mini=1e7, maxi=1e11)
+    model_params["mass"]["prior"] = priors.LogUniform(mini=1e6, maxi=1e11)
 
     # --- Smoothing ---
     if smoothstars:
@@ -268,7 +268,6 @@ def build_sps(zcontinuous=1, compute_vega_mags=False,
     # Faster but need to know object redshift
     print(object_redshift)
     if smoothssp:
-        from astropy.io import fits
         w = sps.ssp.wavelengths
         wa = w * (1 + object_redshift)
         sigma = sps.line_spread(wa)
