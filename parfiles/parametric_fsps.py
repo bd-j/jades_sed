@@ -82,7 +82,7 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     model_params["dust2"]["prior"] = priors.TopHat(mini=0.0, maxi=2.0)
     model_params["logzsol"]["prior"] = priors.TopHat(mini=-2.1, maxi=0.25)
     model_params["tau"]["prior"] = priors.LogUniform(mini=1e-2, maxi=10)
-    model_params["mass"]["prior"] = priors.LogUniform(mini=1e6, maxi=1e11)
+    model_params["mass"]["prior"] = priors.LogUniform(mini=5e5, maxi=1e11)
 
     # --- Smoothing ---
     if smoothstars:
@@ -302,6 +302,13 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
     # Get BEAGLE parameters and S/N for this object
     wave, snr, bcat = get_beagle(objid, datafile=datafile, sgroup=sgroup)
     fsps_pars = beagle_to_fsps(bcat)
+    
+    # now get a model, set it to the beagle values, and compute
+    model = build_model(object_redshift=bcat["redshift"], **kwargs)
+    model.params.update(fsps_pars)
+    assert np.isfinite(model.prior_product(model.theta))
+
+    # Get SPS
     if sps is None:
         sps = build_sps(object_redshift=bcat["redshift"], **kwargs)
 
@@ -314,10 +321,6 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
         assert wave is not None
     obs = {"wavelength": wave, "spectrum": None, "filters": None}
 
-    # now get a model, set it to the beagle values, and compute
-    model = build_model(object_redshift=bcat["redshift"], **kwargs)
-    model.params.update(fsps_pars)
-    assert np.isfinite(model.prior_product(model.theta))
 
     spec, phot, mfrac = model.mean_model(model.theta, obs=obs, sps=sps)
 
