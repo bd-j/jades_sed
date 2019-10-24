@@ -321,7 +321,7 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
         assert wave is not None
     obs = {"wavelength": wave, "spectrum": None, "filters": None}
 
-
+    # Build the spectrum
     spec, phot, mfrac = model.mean_model(model.theta, obs=obs, sps=sps)
 
     # make some noise in here

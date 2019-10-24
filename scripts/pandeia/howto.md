@@ -36,7 +36,7 @@ python fsps_output_to_pandeia.py --spectrum_file=parametric_mist_ckc14.h5 --use_
     - fnu_err
     - fnu
     - sn
-  - DEEP_R100
+  - DEEP_R100 (group, optional)
   - BEAGLE_DEEP_R100 (group, optional)
     - wl
     - fnu_noiseless
