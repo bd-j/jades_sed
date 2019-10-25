@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """Script to fit a NIRSPEC R=100 (PRISM) spectrum of a high-z
-galaxy with a delay-tau SFH and BEAGLE-like parameters
+galaxy with a non-parametric SFH.
 """
 
 import time, sys
@@ -10,9 +10,6 @@ from copy import deepcopy
 
 import numpy as np
 from astropy.io import fits
-
-from prospect.fitting import fit_model
-from prospect.io import write_results as writer
 
 from sedpy.observate import getSED, load_filters
 from prospect.sources import CSPSpecBasis, to_cgs
@@ -31,16 +28,9 @@ except:
 # --------------
 
 
-def uni(x):
-    if sys.version_info >= (3,):
-        return x.decode()
-    else:
-        return x
-
-
 def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
-                object_redshift=None, library_resolution=500, sublibres=False,
-                smoothstars=False, **extras):
+                object_redshift=0.0, library_resolution=500, sublibres=False,
+                smoothstars=False, nbins_sfh=7, **extras):
     """Construct a model.  This method defines a number of parameter
     specification dictionaries and uses them to initialize a
     `models.sedmodel.SedModel` object.
@@ -58,11 +48,15 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
         If supplied, fix the redshift to this number
 
     """
-    from prospect.models.templates import TemplateLibrary
+    from prospect.models.templates import TemplateLibrary, adjust_continuity_agebins
     from prospect.models import priors, sedmodel, transforms
 
-    # --- Get a basic delay-tau SFH parameter set. ---
-    model_params = TemplateLibrary["parametric_sfh"]
+    maxage = cosmo.age(object_redshift).to_value("Gyr")
+    
+    # --- Get a basic parameter set and augment with continuity sfh ---
+    model_params = TemplateLibrary["ssp"]
+    model_params.update(TemplateLibrary["continuity_sfh"])
+    model_params = adjust_continuity_agebins(model_params, tuniv=maxage, nbins=nbins_sfh)
 
     # --- Adjust model initial values to be BEAGLEish ---
     # IMF
@@ -93,7 +87,6 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
         # And set the value to the object_redshift keyword
         model_params["zred"]['init'] = object_redshift
         # Set age prior to max age of universe
-        maxage = cosmo.age(object_redshift).to_value("Gyr")
         tprior = priors.TopHat(mini=0.001, maxi=maxage)
         model_params["tage"]["prior"] = tprior
 
@@ -147,7 +140,7 @@ def lineprofile(wave, linewave, linelum, sigma):
     return val.sum(axis=-1)
 
 
-class JadesSpecBasis(CSPSpecBasis):
+class JadesStepBasis(FastStepBasis):
 
     def line_spread(self, observed_wave):
         """
@@ -250,7 +243,7 @@ def build_sps(zcontinuous=1, compute_vega_mags=False,
               object_redshift=None, smoothssp=False, library_resolution=500,
               sublibres=False, lsf_file="", **extras):
 
-    sps = JadesSpecBasis(zcontinuous=zcontinuous,
+    sps = JadesStepBasis(zcontinuous=zcontinuous,
                          compute_vega_mags=compute_vega_mags)
 
     # Add the data necessary for the lsf smoothing
@@ -278,133 +271,6 @@ def build_sps(zcontinuous=1, compute_vega_mags=False,
     return sps
 
 
-# --------------
-# Observational Data
-# --------------
-
-def build_obs(objid=0, datafile="", seed=0, sps=None,
-              fullspec=False, sgroup="DEEP_R100_withSizes", **kwargs):
-    """Load spectrum from a FITS file
-
-    :param specfile:
-        Name (and path) of the ascii file containing the photometry.
-
-    :param idx: int
-        The catalog object index
-
-    :returns obs:
-        Dictionary of observational data.
-    """
-    from prospect.utils.obsutils import fix_obs
-
-    # Get BEAGLE parameters and S/N for this object
-    wave, snr, bcat = get_beagle(objid, datafile=datafile, sgroup=sgroup)
-    fsps_pars = beagle_to_fsps(bcat)
-    
-    # now get a model, set it to the beagle values, and compute
-    model = build_model(object_redshift=bcat["redshift"], **kwargs)
-    model.params.update(fsps_pars)
-    assert np.isfinite(model.prior_product(model.theta))
-
-    # Get SPS
-    if sps is None:
-        sps = build_sps(object_redshift=bcat["redshift"], **kwargs)
-
-    # Barebones obs dictionary,
-    # use the full output wavelength array if `fullspec`
-    if fullspec:
-        wave = sps.ssp.wavelengths
-        snr = 1000
-    else:
-        assert wave is not None
-    obs = {"wavelength": wave, "spectrum": None, "filters": None}
-
-    # Build the spectrum
-    spec, phot, mfrac = model.mean_model(model.theta, obs=obs, sps=sps)
-
-    # make some noise in here
-    unc = spec / np.clip(snr, 1e-2, np.inf)
-    if int(seed) > 0:
-        np.random.seed(int(seed))
-    noise = np.random.normal(0, 1.0, size=len(unc)) * unc
-
-    noisy_spec = spec + noise
-    mask = (snr > 1e-2)
-    mock = {"spectrum": noisy_spec,
-            "unc": unc,
-            "mask": mask,
-            "filters": None,
-            "maggies": None,
-            "added_noise": noise,
-            "object_redshift": bcat["redshift"],
-            "object_id": objid}
-
-    mock["input_params"] = deepcopy(fsps_pars)
-    mock["model_params"] = deepcopy(model.params)
-
-    obs.update(mock)
-    # This ensures all required keys are present
-    obs = fix_obs(obs)
-
-    return obs
-
-
-def beagle_to_fsps(beagle):
-    fpars = {}
-    # Basic
-    fpars["mass"] = 10**beagle["mass"]
-    fpars["zred"] = beagle["redshift"]
-    # SFH
-    fpars["tage"] = 10**(beagle["max_stellar_age"] - 9)
-    fpars["tau"] = 10**(beagle["tau"] - 9)
-    fpars["logzsol"] = beagle["metallicity"]
-    # Dust
-    mu, tveff = 0.4, beagle["tauV_eff"]
-    fpars["dust2"] = mu * tveff
-    fpars["dust_ratio"] = 1.5
-    # Neb
-    fpars["gas_logu"] = beagle["nebular_logU"]
-    fpars["gas_logz"] = beagle["metallicity"]
-
-    return fpars
-
-
-def get_beagle(idx, datafile="", sgroup="DEEP_R100_withSizes"):
-    import h5py
-    with h5py.File(datafile, "r") as data:
-        cat = data[str(idx)]["beagle_parameters"][()]
-        try:
-            sdat = data[str(idx)][sgroup]
-            #spec = sdat["fnu_noiseless"][:]
-            wave = sdat["wl"][:] * 1e4
-            snr = sdat["sn"][:]
-        except:
-            #print("Could not find unique spec for {}".format(idx))
-            wave = None
-            #spec = None
-            snr = 100
-
-    return wave, snr, cat
-
-# -----------------
-# Noise Model
-# ------------------
-
-def build_noise(**extras):
-    return None, None
-
-# -----------
-# Everything
-# ------------
-
-def build_all(**kwargs):
-
-    obs = build_obs(**kwargs)
-    model = build_model(object_redshift=obs["object_redshift"], **kwargs)
-    sps = build_sps(object_redshift=obs["object_redshift"], **kwargs)
-
-    return obs, model, sps, build_noise(**kwargs)
-
 
 if __name__ == '__main__':
 
@@ -412,12 +278,14 @@ if __name__ == '__main__':
     from prospect import prospect_args
     parser = prospect_args.get_parser()
     # - Add custom arguments -
-    
+
     # --- model ---
     parser.add_argument('--add_duste', action="store_true",
                         help="If set, add dust emission to the model.")
     parser.add_argument('--add_neb', action="store_true",
                         help="If set, add nebular emission in the model (and mock).")
+    parser.add_argument('--nbins_sfh', type=int, default=8, 
+                        help="Number of bins in the nonparametric sfh")
     # --- ssp ---
     parser.add_argument('--fullspec', action="store_true",
                         help="If set, generate the full wavelength array.")
@@ -427,44 +295,15 @@ if __name__ == '__main__':
                         type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
     parser.add_argument('--lsf_file', type=str, default=(""),
                         help="File with the LSF data to use when smoothing SSPs")
-    # --- data ---
-    parser.add_argument('--objid', type=int, default=0,
-                        help="zero-index row number in the table to fit.")
-    parser.add_argument('--datafile', type=str,
-                        default=("/Users/bjohnson/Projects/jades_d2s5/data/"
-                                 "noisy_spectra/parametric_mist_ckc14.h5"),
-                        help="File with beagle parameters and S/N curves")
-    parser.add_argument("--sgroup", type=str, default="DEEP_R100_withSizes",
-                        help=("The type of pandeia mock to use for the wavelength"
-                              " vector and S/N curve"))
-    parser.add_argument('--seed', type=int, default=101,
-                        help=("RNG seed for the noise. Negative values result"
-                              "in random noise."))
 
     args = parser.parse_args()
     run_params = vars(args)
-    obs, model, sps, noise = build_all(**run_params)
-
-    run_params["object_redshift"] = obs["object_redshift"]
+    run_params["object_redshift"] = 4.0
+    
+    model = build_model(**run_params)
+    print(model)
+    sys.exit()
+    
+    #sps = build_sps(**run_params)
     run_params["sps_libraries"] = sps.ssp.libraries
     run_params["param_file"] = __file__
-
-    print(model)
-
-    if args.debug:
-        sys.exit()
-
-    #hfile = setup_h5(model=model, obs=obs, **run_params)
-    ts = time.strftime("%y%b%d-%H.%M", time.localtime())
-    hfile = "{0}_{1}_mcmc.h5".format(args.outfile, ts)
-    output = fit_model(obs, model, sps, noise, **run_params)
-
-    writer.write_hdf5(hfile, run_params, model, obs,
-                      output["sampling"][0], output["optimization"][0],
-                      tsample=output["sampling"][1],
-                      toptimize=output["optimization"][1])
-
-    try:
-        hfile.close()
-    except(AttributeError):
-        pass

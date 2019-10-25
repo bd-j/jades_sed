@@ -11,7 +11,7 @@ from astropy.io import fits
 from astropy.cosmology import Planck15 as cosmo 
 
 from prospect import prospect_args
-#from stochastic_fsps import uni, build_model, build_sps, build_obs
+from stochastic_fsps import uni, build_model, build_sps, build_obs
 
 
 # Observed redshift range
@@ -55,8 +55,8 @@ def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
     ncomp = len(mass)
     nburst = ncomp - 1
     sfr = mass[0] / (tage[0] * 1e9)
-    print(mass, sfr, tage)
-    print(ncomp, nburst, nburst_max, nburst_draw)
+    #print(mass, sfr, tage)
+    #print(ncomp, nburst, nburst_max, nburst_draw)
     # renormalize masses to follow a mass - sfr relation?
     if sfrm:
         mtot = 10**(np.log10(sfr) + 8)
@@ -115,15 +115,16 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=101,
                         help=("RNG seed for the noise. Negative values result"
                               "in no seed being set."))
+    parser.add_argument('--nobj', type=int, default=100,
+                        help=("Number of mock spectra to generate"))
     parser.add_argument('--outroot', type=str, default="stochastic")
 
     args = parser.parse_args()
     run_params = vars(args)
-    nobj = 100
-    params = []
-    for objid in range(nobj):
-        params.append(draw_stochastic_bursts(dseed=objid, **run_params))
-    sys.exit()
+    nobj = args.nobj
+    #params = []
+    #for objid in range(nobj):
+    #    params.append(draw_stochastic_bursts(dseed=objid, **run_params))
     
     sps = build_sps(**run_params)
     run_params["sps_libraries"] = [uni(l) for l in sps.ssp.libraries]
@@ -136,8 +137,8 @@ if __name__ == "__main__":
         for objid in object_ids:
             obj = out.create_group(str(objid))
             # store stochastic parameters
-            params = draw_stochastic_bursts(seed=objid, **kwargs)
-            bpars = obj.create_dataset("stochastic_parameters", data=spars)
+            sdat = draw_stochastic_bursts(dseed=objid, **run_params)
+            spars = obj.create_dataset("stochastic_parameters", data=sdat)
 
     run_params["datafile"] = hfile
 
