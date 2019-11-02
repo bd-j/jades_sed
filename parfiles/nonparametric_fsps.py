@@ -173,11 +173,7 @@ class JadesStepBasis(FastStepBasis):
         lines_added = (np.atleast_1d(self.params.get("nebemlineinspec", [True]))[0] &
                        np.atleast_1d(self.params.get("add_neb_emission", [True]))[0])
         if (~lines_added):
-            linelum = self.ssp.emline_luminosity
-            if linelum.ndim > 1:
-                # tabular sfh
-                linelum = linelum[0] / mass
-            linewave = self.ssp.emline_wavelengths
+            linewave, linelum = self.get_galaxy_elines()
             # This is the line width at the library resolution
             sigma_v = ckms / self.library_resolution / sigma_to_fwhm
             # Use the linespread function if it was done for the stars

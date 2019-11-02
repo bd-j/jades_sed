@@ -27,7 +27,7 @@ mrange_const = (7, 9)
 
 def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
                            mrange_burst=(7, 9), mrange_const=(7, 9),
-                           zstart_max=9, nburst_max=3, sfrm=True,
+                           zstart_max=9, nburst_max=3, mrange_tot=(8, 10.),
                            gas_logu=-3, logzsol=-0.2, tauV_eff=0.3, **extras):
 
     # All the draws
@@ -38,6 +38,8 @@ def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
     zbursts = np.random.uniform(object_redshift, zrange_burst[1], size=(nburst_draw,))
     logm_const = np.random.uniform(*mrange_const)
     logm_burst = np.random.uniform(*mrange_burst, size=(nburst_draw,))
+    if mrange_tot is not None:
+        logm_tot = np.random.uniform(*mrange_tot)
 
     # Age of universe at the redshift of observed object
     tuniv = cosmo.age(object_redshift).to("Gyr").value
@@ -54,13 +56,15 @@ def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
     tage = np.array([age_const] + age_bursts.tolist())
     ncomp = len(mass)
     nburst = ncomp - 1
-    sfr = mass[0] / (tage[0] * 1e9)
     #print(mass, sfr, tage)
     #print(ncomp, nburst, nburst_max, nburst_draw)
     # renormalize masses to follow a mass - sfr relation?
-    if sfrm:
-        mtot = 10**(np.log10(sfr) + 8)
-        mass = mtot / mass.sum() * mass 
+    if mrange_tot is not None:
+        mass = mass * 10**logm_tot / mass.sum()
+        #sfr = mass[0] / (tage[0] * 1e9)
+        #mtot = 10**(np.log10(sfr) + 8)
+        #mass[1:] = (mtot - mass[0]) / mass[1:].sum() * mass[1:]
+    sfr = mass[0] / (tage[0] * 1e9)
     
     # Put into a structred array
     dtype = get_dtype(nburst_max + 1)
@@ -115,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=101,
                         help=("RNG seed for the noise. Negative values result"
                               "in no seed being set."))
-    parser.add_argument('--nobj', type=int, default=100,
+    parser.add_argument('--nobj', type=int, default=250,
                         help=("Number of mock spectra to generate"))
     parser.add_argument('--outroot', type=str, default="stochastic")
 

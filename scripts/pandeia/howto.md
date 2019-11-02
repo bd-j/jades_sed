@@ -9,6 +9,11 @@ python genspec_parametric.py --add_neb --smoothssp=False --fullspec --outroot=pa
 
 Setting `smoothssp=False --fullspec` ensures that the spectra are at the native library resolution with the full spectral range.  The isochrone and stellar library names will be appended to the end of `outroot`
 
+For stochastic SFHs one would instead do
+
+```bash
+python genspec_stochastic.py --add_neb --smoothssp=False --fullspec --outroot=stochastic --nobj=250
+```
 
 # Generate observed spectra and S/N estimates
 
@@ -21,6 +26,11 @@ not.  Note that because pandeia does not account for input library spectral reso
 python fsps_output_to_pandeia.py --spectrum_file=parametric_mist_ckc14.h5 --use_sizes --nobj=5000
 ```
 
+and for stochastic SFHs
+
+```bash
+python fsps_output_to_pandeia.py --spectrum_file=stochastic_mist_ckc14.h5 --nobj=250
+```
 
 # HDF5 file structure
 

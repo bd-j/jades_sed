@@ -26,8 +26,10 @@ def build_all(**kwargs):
         red = cat[idx]["stochastic_parameters"]["redshift"]
     sps = build_sps(object_redshift=red, **kwargs)
     obs = build_obs(sps=sps, **kwargs)
+    del sps
     model = build_model(object_redshift=red, **kwargs)
-
+    sps = build_sps(object_redshift=red, **kwargs)
+    
     return obs, model, sps, (None, None)
 
 

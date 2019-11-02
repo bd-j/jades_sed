@@ -16,7 +16,7 @@ pl.rcParams["mathtext.sf"] = "serif"
 pl.rcParams['mathtext.it'] = 'serif:italic'
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
-           "noisy_spectra/parametric_mist_ckc14.h5")
+           "noisy_spectra/pstochastic_mist_ckc14.h5")
 
 
 def get_snr():
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # extract snr and parameters
     snr, jcat = [], []
     
-    sgroup = "DEEP_R100_withSizes"
+    sgroup = "DEEP_R100" #"_withSizes"
     with h5py.File(catname, "r") as catalog:
         objlist = list(catalog.keys())
         for strobj in objlist:
@@ -36,7 +36,8 @@ if __name__ == "__main__":
             except:
                 continue
             snr.append(etc["sn"][:])
-            jcat.append(catalog[strobj]["jaguar_parameters"][()])
+            #jcat.append(catalog[strobj]["jaguar_parameters"][()])
+            jcat.append(catalog[strobj]["stochastic_parameters"][()])
     jcat = np.hstack(jcat)
     snr = np.array(snr)
     

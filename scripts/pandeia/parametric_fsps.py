@@ -5,24 +5,22 @@
 galaxy with a delay-tau SFH and BEAGLE-like parameters
 """
 
-import time, sys, glob
-from os.path import join as pjoin
+import time, sys
 from copy import deepcopy
 
 import numpy as np
-from sedpy.observate import load_filters
+from astropy.io import fits
 
-from prospect import prospect_args
 from prospect.fitting import fit_model
 from prospect.io import write_results as writer
-from prospect.utils.smoothing import sigma_to_fwhm, ckms
 
-from sedpy.observate import getSED
+from sedpy.observate import getSED, load_filters
 from prospect.sources import CSPSpecBasis, to_cgs
+from prospect.utils.smoothing import sigma_to_fwhm, ckms
 from prospect.sources.constants import cosmo, jansky_cgs, lightspeed
 
+
 try:
-    from astropy.io import fits
     nirspec_lsf_file = "/Users/bjohnson/Projects/jades_d2s5/data/jwst_nirspec_prism_disp.fits"
     nirspec_lsf_table = np.array(fits.getdata(nirspec_lsf_file))
 except:
@@ -82,7 +80,7 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     model_params["dust2"]["prior"] = priors.TopHat(mini=0.0, maxi=2.0)
     model_params["logzsol"]["prior"] = priors.TopHat(mini=-2.1, maxi=0.25)
     model_params["tau"]["prior"] = priors.LogUniform(mini=1e-2, maxi=10)
-    model_params["mass"]["prior"] = priors.LogUniform(mini=1e7, maxi=1e11)
+    model_params["mass"]["prior"] = priors.LogUniform(mini=5e5, maxi=1e11)
 
     # --- Smoothing ---
     if smoothstars:
@@ -182,11 +180,7 @@ class JadesSpecBasis(CSPSpecBasis):
         lines_added = (np.atleast_1d(self.params.get("nebemlineinspec", [True]))[0] &
                        np.atleast_1d(self.params.get("add_neb_emission", [True]))[0])
         if (~lines_added):
-            linelum = self.ssp.emline_luminosity
-            if linelum.ndim > 1:
-                # tabular sfh
-                linelum = linelum[0] / mass
-            linewave = self.ssp.emline_wavelengths
+            linewave, linelum = self.get_galaxy_elines()
             # This is the line width at the library resolution
             sigma_v = ckms / self.library_resolution / sigma_to_fwhm
             # Use the linespread function if it was done for the stars
@@ -268,7 +262,6 @@ def build_sps(zcontinuous=1, compute_vega_mags=False,
     # Faster but need to know object redshift
     print(object_redshift)
     if smoothssp:
-        from astropy.io import fits
         w = sps.ssp.wavelengths
         wa = w * (1 + object_redshift)
         sigma = sps.line_spread(wa)
@@ -303,6 +296,13 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
     # Get BEAGLE parameters and S/N for this object
     wave, snr, bcat = get_beagle(objid, datafile=datafile, sgroup=sgroup)
     fsps_pars = beagle_to_fsps(bcat)
+    
+    # now get a model, set it to the beagle values, and compute
+    model = build_model(object_redshift=bcat["redshift"], **kwargs)
+    model.params.update(fsps_pars)
+    assert np.isfinite(model.prior_product(model.theta))
+
+    # Get SPS
     if sps is None:
         sps = build_sps(object_redshift=bcat["redshift"], **kwargs)
 
@@ -315,11 +315,7 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
         assert wave is not None
     obs = {"wavelength": wave, "spectrum": None, "filters": None}
 
-    # now get a model, set it to the beagle values, and compute
-    model = build_model(object_redshift=bcat["redshift"], **kwargs)
-    model.params.update(fsps_pars)
-    assert np.isfinite(model.prior_product(model.theta))
-
+    # Build the spectrum
     spec, phot, mfrac = model.mean_model(model.theta, obs=obs, sps=sps)
 
     # make some noise in here
@@ -409,12 +405,16 @@ def build_all(**kwargs):
 if __name__ == '__main__':
 
     # - Parser with default arguments -
+    from prospect import prospect_args
     parser = prospect_args.get_parser()
     # - Add custom arguments -
+    
+    # --- model ---
     parser.add_argument('--add_duste', action="store_true",
                         help="If set, add dust emission to the model.")
     parser.add_argument('--add_neb', action="store_true",
                         help="If set, add nebular emission in the model (and mock).")
+    # --- ssp ---
     parser.add_argument('--fullspec', action="store_true",
                         help="If set, generate the full wavelength array.")
     parser.add_argument('--smoothssp', default=True,
@@ -423,6 +423,7 @@ if __name__ == '__main__':
                         type=lambda x: (str(x).lower() in ['true', '1', 'yes']))
     parser.add_argument('--lsf_file', type=str, default=(""),
                         help="File with the LSF data to use when smoothing SSPs")
+    # --- data ---
     parser.add_argument('--objid', type=int, default=0,
                         help="zero-index row number in the table to fit.")
     parser.add_argument('--datafile', type=str,
