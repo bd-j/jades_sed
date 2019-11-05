@@ -12,7 +12,7 @@ import numpy as np
 from astropy.io import fits
 
 from sedpy.observate import getSED, load_filters
-from prospect.sources import CSPSpecBasis, to_cgs
+from prospect.sources import FastStepBasis, to_cgs
 from prospect.utils.smoothing import sigma_to_fwhm, ckms
 from prospect.sources.constants import cosmo, jansky_cgs, lightspeed
 
@@ -55,6 +55,7 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     
     # --- Get a basic parameter set and augment with continuity sfh ---
     model_params = TemplateLibrary["ssp"]
+    _ = model_params.pop("tage")
     model_params.update(TemplateLibrary["continuity_sfh"])
     model_params = adjust_continuity_agebins(model_params, tuniv=maxage, nbins=nbins_sfh)
 
@@ -73,8 +74,7 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
     # adjust priors
     model_params["dust2"]["prior"] = priors.TopHat(mini=0.0, maxi=2.0)
     model_params["logzsol"]["prior"] = priors.TopHat(mini=-2.1, maxi=0.25)
-    model_params["tau"]["prior"] = priors.LogUniform(mini=1e-2, maxi=10)
-    model_params["mass"]["prior"] = priors.LogUniform(mini=5e5, maxi=1e11)
+    model_params["logmass"]["prior"] = priors.TopHat(mini=5.3, maxi=11)
 
     # --- Smoothing ---
     if smoothstars:
@@ -86,9 +86,6 @@ def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
         model_params["zred"]['isfree'] = False
         # And set the value to the object_redshift keyword
         model_params["zred"]['init'] = object_redshift
-        # Set age prior to max age of universe
-        tprior = priors.TopHat(mini=0.001, maxi=maxage)
-        model_params["tage"]["prior"] = tprior
 
     # --- Optional bells ---
     # Metallicity

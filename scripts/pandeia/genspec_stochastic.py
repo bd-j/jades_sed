@@ -8,7 +8,7 @@ from copy import deepcopy
 import h5py
 import numpy as np
 from astropy.io import fits
-from astropy.cosmology import Planck15 as cosmo 
+from astropy.cosmology import Planck15 as cosmo
 
 from prospect import prospect_args
 from stochastic_fsps import uni, build_model, build_sps, build_obs
@@ -44,13 +44,13 @@ def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
     # Age of universe at the redshift of observed object
     tuniv = cosmo.age(object_redshift).to("Gyr").value
 
-    # convert drawn values to FSPS/prospector parameters    
+    # convert drawn values to FSPS/prospector parameters
     good_bursts = zbursts > object_redshift
     age_const = tuniv - cosmo.age(zstart).to("Gyr").value
     age_bursts = tuniv - cosmo.age(zbursts[good_bursts]).to("Gyr").value
     mconst = 10**logm_const
     mburst = 10**logm_burst[good_bursts]
-    
+
     # Put components in lists
     mass = np.array([mconst] + mburst.tolist())
     tage = np.array([age_const] + age_bursts.tolist())
@@ -65,7 +65,7 @@ def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
         #mtot = 10**(np.log10(sfr) + 8)
         #mass[1:] = (mtot - mass[0]) / mass[1:].sum() * mass[1:]
     sfr = mass[0] / (tage[0] * 1e9)
-    
+
     # Put into a structred array
     dtype = get_dtype(nburst_max + 1)
     row = np.zeros(1, dtype=dtype)
@@ -74,7 +74,7 @@ def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
     row["seed"] = dseed
     row["sfr"] = sfr
     row["mass"][0, :ncomp]  = mass
-    row["sfh"][0, :ncomp]   = np.array([1] +  nburst * [0])
+    row["sfh"][0, :ncomp]   = np.array([1] + nburst * [0])
     row["tage"][0, :ncomp]  = tage
     row["const"][0, :ncomp] = np.array([1] + nburst * [0])
     row["metallicity"] = logzsol
@@ -82,7 +82,7 @@ def draw_stochastic_bursts(dseed=None, zrange=(5, 8), zrange_burst=(9, 13),
     row["tauV_eff"] = tauV_eff
     row["zcomp"][0, 0] = zstart
     row["zcomp"][0, 1:ncomp] = zbursts[good_bursts]
-    
+
     return row
 
 
@@ -92,17 +92,17 @@ def get_dtype(max_nburst):
     cname = ["redshift", "metallicity", "gas_logu", "tauV_eff", "sfr"]
     mcname = ["mass", "tage", "sfh", "const", "zcomp"]
     exname = ["nburst", "seed"]
-    
+
     cols = ([(n, np.float) for n in cname] +
             [(n, np.float, (nmax,)) for n in mcname] +
             [(n, np.int) for n in exname]
-           )
+            )
     dtype = np.dtype(cols)
     return dtype
-    
-    
+
+
 if __name__ == "__main__":
-    
+
     # - Parser with default arguments -
     parser = prospect_args.get_parser()
     # - Add custom arguments -
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     #params = []
     #for objid in range(nobj):
     #    params.append(draw_stochastic_bursts(dseed=objid, **run_params))
-    
+
     sps = build_sps(**run_params)
     run_params["sps_libraries"] = [uni(l) for l in sps.ssp.libraries]
 

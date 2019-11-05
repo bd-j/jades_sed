@@ -10,9 +10,9 @@ from copy import deepcopy
 import numpy as np
 
 from parametric_fsps import build_sps, uni
-    
 
-def build_model(seed=1, ncomp=1, add_duste=False, add_neb=True, **extras):
+
+def build_model(ncomp=1, add_duste=False, add_neb=True, **extras):
     """Build a model appropriate for a stochastic SFH.  This model is
     *not* meant to be fit as such
     """

@@ -16,6 +16,8 @@ from nonparametric_fsps import build_model, build_sps
 from stochastic_fsps import build_obs
 from parametric_fsps import build_sps as build_stoch_sps
 
+from parametric_fsps import uni
+
 # -----------
 # Everything
 # ------------
@@ -23,7 +25,7 @@ from parametric_fsps import build_sps as build_stoch_sps
 def build_all(**kwargs):
     with h5py.File(kwargs["datafile"], "r") as cat:
         idx = str(kwargs["objid"])
-        red = cat[idx]["stochastic_parameters"]["redshift"]
+        red = cat[idx]["stochastic_parameters"]["redshift"][0]
     sps_stoch = build_stoch_sps(object_redshift=red, **kwargs)
     obs = build_obs(sps=sps_stoch, **kwargs)
     del sps_stoch
@@ -38,13 +40,13 @@ if __name__ == '__main__':
     from prospect import prospect_args
     parser = prospect_args.get_parser()
     # - Add custom arguments -
-    
+
     # --- model ---
     parser.add_argument('--add_duste', action="store_true",
                         help="If set, add dust emission to the model.")
     parser.add_argument('--add_neb', action="store_true",
                         help="If set, add nebular emission in the model (and mock).")
-    parser.add_argument('--nbins_sfh', type=int, default=8, 
+    parser.add_argument('--nbins_sfh', type=int, default=8,
                         help="Number of bins in the nonparametric sfh")
     # --- ssp ---
     parser.add_argument('--fullspec', action="store_true",
