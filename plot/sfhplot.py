@@ -45,7 +45,7 @@ def show_sfh(ages, sfrs=None, ax=None,
 def params_to_sfh(params, time=None, agebins=None):
 
     parametric = (time is not None)
-    
+
     if parametric:
         taus, tages, masses = params["tau"], params["tage"], params["mass"]
         sfhs = []
