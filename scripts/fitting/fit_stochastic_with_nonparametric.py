@@ -30,7 +30,7 @@ def build_all(**kwargs):
     obs = build_obs(sps=sps_stoch, **kwargs)
     del sps_stoch
     model = build_model(object_redshift=red, **kwargs)
-    sps = build_sps(object_redshift=red)
+    sps = build_sps(object_redshift=red, **kwargs)
     return obs, model, sps, (None, None)
 
 
