@@ -72,6 +72,32 @@ def params_to_sfh(params, time=None, agebins=None):
     return lookback, sfhs, cmfs
 
 
+def stoch_params_to_sfh(params, sig=0.01):
+    """Take a stochastic parameter set and return an sfh
+
+    :returns lookback:
+        lookback time, Gyr
+
+    :returns sfr:
+        SFR, in Msun/yr
+    """
+    tuniv = cosmo.age(params["redshift"]).to("Gyr").value
+    nt = max(tuniv*2/sig, 1000)
+    lookback = np.linspace(0, tuniv, nt)
+    sfr = np.zeros_like(lookback)
+    const = params["mass"][0] / params["tage"][0]
+    sfr[lookback < params["tage"][0]] = const
+    # Bursts
+    stop = params["nburst"] + 1
+    tb = params["tage"][1:stop]
+    mb = params["mass"][1:stop]
+    exparg = -0.5 * ((lookback[:, None] - tb[None, :]) / sig)**2 
+    bs = mb / (sig*np.sqrt(2*np.pi)) * np.exp(exparg)
+    sfr += bs.sum(axis=-1)
+
+    return lookback, sfr * 1e-9
+
+
 def delay_tau(theta, time=None):
     A, tau, age = theta
     tstart = time.max() - age
