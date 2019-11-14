@@ -15,7 +15,7 @@ from astropy.io import fits
 
 from prospect.io.read_results import results_from
 from plotutils import sample_posterior, chain_to_struct
-from sfhplot import delay_tau_ssfr
+from sfhplot import delay_tau_ssfr, delay_tau_mwa
 
 
 pl.rcParams["font.family"] = "serif"
@@ -29,6 +29,11 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14.h5")
 
+
+def construct_parameters():
+    pass
+
+
 def get_truths(results, catname=catname):
     jcat = []
     with h5py.File(catname, "r") as catalog:
@@ -39,6 +44,7 @@ def get_truths(results, catname=catname):
     jcat = np.hstack(jcat)
     #jcat = convert(jcat)
     return jcat
+
 
 def setup(files):
     results, observations, models = [], [], []
@@ -51,7 +57,7 @@ def setup(files):
 
 
 if __name__ == "__main__":
-    
+
     parameter = "mass"
     xparam = "mass"
     nsample = 500
@@ -69,7 +75,10 @@ if __name__ == "__main__":
     for s in samples:
         ssfr = delay_tau_ssfr([s["tau"][:, 0], s["tage"][:, 0]])
         sfr = ssfr * s["mass"][:, 0]
-        rectified_samples.append(append_fields(s, ["ssfr", "sfr"], [ssfr, sfr]))
+        mwa = delay_tau_mwa([s["tau"][:, 0], s["tage"][:, 0]])
+        cols = ["ssfr", "sfr", "agem"]
+        vals = [ssfr, sfr, mwa]
+        rectified_samples.append(append_fields(s, cols, vals))
 
     samples = rectified_samples
     truths = get_truths(results)

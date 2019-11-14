@@ -27,6 +27,7 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14.h5")
 
+
 def get_truths(results, catname=catname):
     jcat = []
     with h5py.File(catname, "r") as catalog:
@@ -37,6 +38,7 @@ def get_truths(results, catname=catname):
     jcat = np.hstack(jcat)
     #jcat = convert(jcat)
     return jcat
+
 
 def setup(files):
     results, observations, models = [], [], []
@@ -50,8 +52,6 @@ def setup(files):
         observations.append(obs)
         models.append(model)
     return results, observations, models
-
-
 
 
 if __name__ == "__main__":

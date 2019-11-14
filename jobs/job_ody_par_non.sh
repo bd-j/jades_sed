@@ -1,13 +1,13 @@
 #!/bin/bash
 
-#SBATCH -J parfit_jades
+#SBATCH -J parnonfit_jades
 #SBATCH -n 1 # Number of cores requested
 #SBATCH -N 1 # Ensure that all cores are on one machine
-#SBATCH -t 3:00:00 # Runtime 
+#SBATCH -t 72:00:00 # Runtime 
 #SBATCH -p conroy,shared # Partition to submit to
 #SBATCH --mem-per-cpu=2000 # Memory per node in MB (see also --mem-per-cpu)
-#SBATCH -o /n/scratchlfs/conroy_lab/bdjohnson/jades_sed/logs/parfit_%A_%a.out # Standard out goes to this file
-#SBATCH -e /n/scratchlfs/conroy_lab/bdjohnson/jades_sed/logs/parfit_%A_%a.err # Standard err goes to this file
+#SBATCH -o /n/scratchlfs/conroy_lab/bdjohnson/jades_sed/logs/parnonfit_%A_%a.out # Standard out goes to this file
+#SBATCH -e /n/scratchlfs/conroy_lab/bdjohnson/jades_sed/logs/parnonfit_%A_%a.err # Standard err goes to this file
 
 source activate jades
 
@@ -20,12 +20,13 @@ objid=${SLURM_ARRAY_TASK_ID}*10
 echo $objid
 
 outdir=./output
-out=$outdir/parametric_parametric_$objid
+out=$outdir/parametric_nonparametric_$objid
 
-python ./fit_parametric_with_parametric.py \
+python ./fit_parametric_with_nonparametric.py \
        --objid=$objid \
-       --add_neb --smoothssp=True --sublibres=True \
+       --add_neb --nbins_sfh=$nbins_sfh \
+       --smoothssp=True --sublibres=True \
        --lsf_file=$lsf_file \
        --datafile=$catalog --sgroup=$sgroup \
-       --dynesty --nlive_init=200 \
+       --dynesty --nlive_init=400 \
        --outfile=$out
