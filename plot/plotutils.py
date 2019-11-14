@@ -5,11 +5,14 @@ import numpy as np
 import pickle
 from prospect.models import priors
 
+from scipy.ndimage import gaussian_filter as norm_kde
+
 
 __all__ = ["sample_prior", "sample_posterior",
-           "_quantile", "quantile",
+           "_quantile", "quantile", "get_spans",
            "setup", "chain_to_struct", "get_truths",
-           "step", "fill_between"]
+           "step", "fill_between", "get_cmap",
+           "violinplot", "twodhist"]
 
 
 def sample_prior(model, nsample=1e6):
@@ -79,6 +82,24 @@ def sample_posterior(chain, weights=None, nsample=int(1e4),
         return flatchain[inds, :]
     else:
         return flatchain[inds, :], extra[inds, ...]
+
+
+def get_spans(span, samples, weights=None):
+    """Get ranges from percentiles of samples
+    """
+    ndim = len(samples)
+    if span is None:
+        span = [0.999999426697 for i in range(ndim)]
+    span = list(span)
+    if len(span) != len(samples):
+        raise ValueError("Dimension mismatch between samples and span.")
+    for i, _ in enumerate(span):
+        try:
+            xmin, xmax = span[i]
+        except(TypeError):
+            q = [0.5 - 0.5 * span[i], 0.5 + 0.5 * span[i]]
+            span[i] = _quantile(samples[i], q, weights=weights)
+    return span
 
 
 def quantile(xarr, q, weights=None):
@@ -255,8 +276,124 @@ def violinplot(data, pos, widths, ax=None,
             xmin, xmax = _quantile(data[i], q)
         good = (data[i] > xmin) & (data[i] < xmax)
         clipped_data.append(data[i][good])
-    
+
     parts = ax.violinplot(data, positions=pos, widths=widths, **violin_kwargs)
     for i, pc in enumerate(parts['bodies']):
         pc.set_facecolor(color[i])
         pc.set_alpha(alpha)
+
+
+def twodhist(x, y, ax=None, span=None, weights=None,
+             smooth=0.02, levels=None, color='gray',
+             plot_density=False, plot_contours=True, fill_contours=True,
+             contour_kwargs={}, contourf_kwargs={}, **kwargs):
+
+    # Determine plotting bounds.
+    span = get_spans(span, [x, y], weights=weights)
+    # Setting up smoothing.
+    smooth = np.zeros(2) + smooth
+
+    # --- Now actually do the plotting-------
+
+    # The default "sigma" contour levels.
+    if levels is None:
+        levels = 1.0 - np.exp(-0.5 * np.arange(0.5, 2.1, 0.5) ** 2)
+    # This "color map" is the list of colors for the contour levels if the
+    # contours are filled.
+    contour_cmap = get_cmap(color, levels)
+    # Initialize smoothing.
+    smooth = np.zeros(2) + np.array(smooth)
+    bins = []
+    svalues = []
+    for s in smooth:
+        if s > 1.0:
+            # If `s` > 1.0, the weighted histogram has
+            # `s` bins within the provided bounds.
+            bins.append(int(s))
+            svalues.append(0.)
+        else:
+            # If `s` < 1, oversample the data relative to the
+            # smoothing filter by a factor of 2, then use a Gaussian
+            # filter to smooth the results.
+            bins.append(int(round(2. / s)))
+            svalues.append(2.)
+
+    # We'll make the 2D histogram to directly estimate the density.
+    try:
+        H, X, Y = np.histogram2d(x.flatten(), y.flatten(), bins=bins,
+                                 range=list(map(np.sort, span)),
+                                 weights=weights)
+    except ValueError:
+        raise ValueError("It looks like at least one of your sample columns "
+                         "have no dynamic range.")
+
+    # Smooth the results.
+    if not np.all(svalues == 0.):
+        H = norm_kde(H, svalues)
+
+    # Compute the density levels.
+    Hflat = H.flatten()
+    inds = np.argsort(Hflat)[::-1]
+    Hflat = Hflat[inds]
+    sm = np.cumsum(Hflat)
+    sm /= sm[-1]
+    V = np.empty(len(levels))
+    for i, v0 in enumerate(levels):
+        try:
+            V[i] = Hflat[sm <= v0][-1]
+        except:
+            V[i] = Hflat[0]
+    V.sort()
+    m = (np.diff(V) == 0)
+    if np.any(m) and plot_contours:
+        print("Too few points to create valid contours.")
+    while np.any(m):
+        V[np.where(m)[0][0]] *= 1.0 - 1e-4
+        m = (np.diff(V) == 0)
+    V.sort()
+
+    # Compute the bin centers.
+    X1, Y1 = 0.5 * (X[1:] + X[:-1]), 0.5 * (Y[1:] + Y[:-1])
+
+    # Extend the array for the sake of the contours at the plot edges.
+    H2 = H.min() + np.zeros((H.shape[0] + 4, H.shape[1] + 4))
+    H2[2:-2, 2:-2] = H
+    H2[2:-2, 1] = H[:, 0]
+    H2[2:-2, -2] = H[:, -1]
+    H2[1, 2:-2] = H[0]
+    H2[-2, 2:-2] = H[-1]
+    H2[1, 1] = H[0, 0]
+    H2[1, -2] = H[0, -1]
+    H2[-2, 1] = H[-1, 0]
+    H2[-2, -2] = H[-1, -1]
+    X2 = np.concatenate([X1[0] + np.array([-2, -1]) * np.diff(X1[:2]), X1,
+                         X1[-1] + np.array([1, 2]) * np.diff(X1[-2:])])
+    Y2 = np.concatenate([Y1[0] + np.array([-2, -1]) * np.diff(Y1[:2]), Y1,
+                         Y1[-1] + np.array([1, 2]) * np.diff(Y1[-2:])])
+
+    clevels = np.concatenate([[0], V, [H.max() * (1 + 1e-4)]])
+    # plot contour fills
+    if plot_contours and fill_contours and (ax is not None):
+        cfk = {}
+        cfk["colors"] = contour_cmap
+        cfk["antialiased"] = False
+        cfk.update(contourf_kwargs)
+        ax.contourf(X2, Y2, H2.T, clevels, **cfk)
+
+    # Plot the contour edge colors.
+    if plot_contours and (ax is not None):
+        ck = {}
+        ck["colors"] = color
+        ck.update(contour_kwargs)
+        ax.contour(X2, Y2, H2.T, V, **ck)
+
+    return X2, Y2, H2.T, V, clevels, ax
+
+
+def get_cmap(color, levels):
+    nl = len(levels)
+    rgba_color = colorConverter.to_rgba(color)
+    contour_cmap = [list(rgba_color) for l in levels] + [list(rgba_color)]
+    for i in range(nl+1):
+        contour_cmap[i][-1] *= float(i) / (len(levels) + 1)
+    return contour_cmap

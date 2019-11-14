@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+"""Plot P(delta parameter) vs parameter with vilin plots.
+"""
+
 import sys, os, glob, time
 import numpy as np
 import matplotlib.pyplot as pl
@@ -48,12 +52,17 @@ def setup(files):
 
 if __name__ == "__main__":
     
+    parameter = "mass"
+    xparam = "mass"
     nsample = 500
-    files = glob.glob("/Users/bjohnson/Projects/jades_d2s5/jobs/output/*h5")
+    ftype = "parametric_parametric"
+    search = "/Users/bjohnson/Projects/jades_d2s5/jobs/output/v2/{}*h5"
+    files = glob.glob(search.format(ftype))
     results, obs, models = setup(files)
-    
-    samples = [sample_posterior(res["chain"], res["weights"], nsample=nsample) for
-               res in results]
+
+    # --- construct samples ----
+    samples = [sample_posterior(res["chain"], res["weights"], nsample=nsample) 
+               for res in results]
     samples = [chain_to_struct(s, m) for s, m in zip(samples, models)]
     rectified_samples = []
     # Add SFR to samples
@@ -65,14 +74,11 @@ if __name__ == "__main__":
     samples = rectified_samples
     truths = get_truths(results)
     redshifts = np.array([t["redshift"] for t in truths])
-    
+
     #sys.exit()
 
-    
-    parameter = "mass"
-    xparam = "mass"
     zlims = [2, 3, 4, 5, 6, 7]
-    
+
     cmap = matplotlib.cm.get_cmap('viridis')
     nbins = len(zlims) - 1
     fig, axes = pl.subplots(nbins, 1, sharex="col", figsize=(10.5, 9.5))
@@ -108,6 +114,6 @@ if __name__ == "__main__":
 
     ax.set_xlabel(r"$\log \, ({}_{{\rm input}})$".format(xparam), fontsize=14)
     [ax.set_ylim(-0.5, 0.5) for ax in axes]
-    axes[0].set_title("Mock=Parametric; Model=Parametric; S/N=DEEP with sizes")
+    axes[0].set_title("Mock={}; Model={}; S/N=DEEP with sizes".format(*ftype.split("_")))
     #fig.savefig("figures/delta_{}.png".format(parameter), dpi=600)
     pl.show()
