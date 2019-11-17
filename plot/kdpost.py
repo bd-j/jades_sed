@@ -13,8 +13,8 @@ from astropy.io import fits
 from prospect.io.read_results import results_from
 from plotutils import sample_posterior, chain_to_struct
 from plotutils import twodhist, get_cmap
-from sfhplot import delay_tau_ssfr
 
+from dpost_par_par import construct_parameters, get_truths
 
 pl.rcParams["font.family"] = "serif"
 pl.rcParams["font.serif"] = ["STIXGeneral"]
@@ -26,18 +26,6 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14.h5")
-
-
-def get_truths(results, catname=catname):
-    jcat = []
-    with h5py.File(catname, "r") as catalog:
-        for res in results:
-            objid = res["run_params"]["objid"]
-            jcat.append(catalog[str(objid)]["beagle_parameters"][()])
-
-    jcat = np.hstack(jcat)
-    #jcat = convert(jcat)
-    return jcat
 
 
 def setup(files):
@@ -56,26 +44,21 @@ def setup(files):
 
 if __name__ == "__main__":
 
+    nsample = 1000
     ftype = "parametric_parametric"
     search = "/Users/bjohnson/Projects/jades_d2s5/jobs/output/v2/{}*h5".format(ftype)
     files = glob.glob(search)
     results, obs, models = setup(files)
 
+    names = results[0]["theta_labels"]
     # --- construct samples ----
-    nsample = 1000
     samples = [sample_posterior(res["chain"], res["weights"], nsample=nsample)
                for res in results]
-    samples = [chain_to_struct(s, m) for s, m in zip(samples, models)]
-    rectified_samples = []
-    # Add SFR to samples
-    for s in samples:
-        ssfr = delay_tau_ssfr([s["tau"][:, 0], s["tage"][:, 0]])
-        sfr = ssfr * s["mass"][:, 0]
-        rectified_samples.append(append_fields(s, ["ssfr", "sfr"], [ssfr, sfr]))
-
-    samples = rectified_samples
+    samples = [chain_to_struct(s, m, names=names) for s, m in zip(samples, models)]
+    samples = construct_parameters(samples)
     truths = get_truths(results)
-    redshifts = np.array([t["redshift"] for t in truths])
+    truths = construct_parameters([truths])[0]
+    redshifts = truths["zred"]
 
     #sys.exit()
 
@@ -89,16 +72,21 @@ if __name__ == "__main__":
     nbins = len(zlims) - 1
     fig, axes = pl.subplots(3, 2, sharex="col", sharey="row", 
                             figsize=(10.25, 11.5), squeeze=False)
+    tfig, taxes = pl.subplots(3, 2, sharex="col", sharey="row", 
+                             figsize=(10.25, 11.5), squeeze=False)
     for iz in range(nbins):
         ax = axes.flat[iz]
+        tax = taxes.flat[iz]
         zlo, zhi = zlims[iz], zlims[iz + 1]
-        choose = np.where((truths["redshift"] > zlo) & (truths["redshift"] < zhi))[0]
+        choose = np.where((redshifts > zlo) & (redshifts < zhi))[0]
+        tax.plot(truths["mass"][choose], truths["sfr"][choose], 
+                 marker="o", linestyle="", markersize=2)
         for idx in choose:
-            p1 = np.squeeze(samples[idx][par1]) 
+            p1 = np.squeeze(samples[idx][par1])
             #p1 -= 10**truths[idx][par1])/10**truths[idx][par1] 
-            p2 = np.squeeze(samples[idx][par2]) 
+            p2 = np.squeeze(samples[idx][par2])
             #p2 -= 10**truths[idx][par2])/10**truths[idx][par2]
-            znorm = (truths[idx]["redshift"] - zlo) / (zhi - zlo)
+            znorm = (redshifts[idx] - zlo) / (zhi - zlo)
             X, Y, H, V, clevels, _ = twodhist(p1, p2, levels=levels, smooth=0.05)
             #ax = sns.kdeplot(p1, p2, cmap="Reds", n_levels=3, shade=True,
             #                 shade_lowest=False, ax=ax)
@@ -106,16 +94,23 @@ if __name__ == "__main__":
             ax.contour(X, Y, H, V, colors=color)
 
         ax.text(0.2, 0.8, r"${:.1f}\,<\,z\,<\,{:.1f}$".format(zlo, zhi), transform=ax.transAxes)
+        tax.text(0.2, 0.8, r"${:.1f}\,<\,z\,<\,{:.1f}$".format(zlo, zhi), transform=tax.transAxes)
 
-    [ax.set_xscale("log") for ax in axes.flat]
-    [ax.set_yscale("log") for ax in axes.flat]
+    allaxes = axes.flatten().tolist() + taxes.flatten().tolist()
 
-    [ax.set_xlim(2e6, 1e10) for ax in axes.flat]
-    [ax.set_ylim(3e-2, 100) for ax in axes.flat]
+    [ax.set_xscale("log") for ax in allaxes]
+    [ax.set_yscale("log") for ax in allaxes]
+
+    [ax.set_xlim(2e6, 1e10) for ax in allaxes]
+    [ax.set_ylim(3e-2, 100) for ax in allaxes]
     [ax.set_ylabel("SFR") for ax in axes[:, 0]]
     [ax.set_xlabel(r"$M_{\rm formed}$") for ax in axes[-1, :]]
+    [ax.set_ylabel("SFR") for ax in taxes[:, 0]]
+    [ax.set_xlabel(r"$M_{\rm formed}$") for ax in taxes[-1, :]]
 
     fig.suptitle("Mock={}; Model={}; S/N=DEEP with sizes".format(*ftype.split("_")))
-    fig.savefig("figures/mass_sfr_{}.png".format(ftype))
+    tfig.suptitle("Mock={}; Model={}; S/N=DEEP with sizes".format(*ftype.split("_")))
+    fig.savefig("figures/mass_sfr_{}.png".format(ftype), dpi=400)
+    tfig.savefig("figures/mass_sfr_truth_{}.png".format(ftype), dpi=400)
 
     pl.show()

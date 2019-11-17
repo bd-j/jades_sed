@@ -4,7 +4,9 @@
 import numpy as np
 from scipy.special import gamma, gammainc
 
-#from utils import step, fill_between
+from plotutils import step, fill_between
+from prospect.sources.constants import cosmo
+
 
 __all__ = ["show_sfh", "params_to_sfh",
            "delay_tau", "delay_tau_cmf", "delay_tau_mwa", "delay_tau_ssfr",
@@ -121,13 +123,24 @@ def delay_tau_cmf(theta, time=None):
     return cmf
 
 
-def delay_tau_mwa(theta):
+def delay_tau_mwa_numerical(theta):
     ''' this is done numerically
     '''
     tau, tage = theta
     t = np.linspace(0, tage, 1000)
     tavg = np.trapz((t**2)*np.exp(-t/tau), t) / np.trapz(t*np.exp(-t/tau), t)
     return tage - tavg
+
+
+def delay_tau_mwa(theta):
+    ''' this is done analytic
+    '''
+    power = 1
+    tau, tage = theta
+    tt = tage / tau
+    mwt = gammainc(power+2, tt) * gamma(power+2) / gammainc(power+1, tt) * tau
+
+    return tage - mwt
 
 
 def delay_tau_ssfr(theta, power=1):

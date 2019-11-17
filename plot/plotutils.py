@@ -183,11 +183,16 @@ def chain_to_struct(chain, model=None, names=None):
             model.params.update(chain)
         else:
             model.set_parameters(chain[0])
+        dt = []
         names = model.free_params
-        dt = [(p, model.params[p].dtype, model.params[p].shape)
-            for p in names]
+        for p in names:
+            if model.params[p].shape == (1,):
+                s = None
+            else:
+                s = model.params[p].shape
+            dt.append((p, model.params[p].dtype, s))
     else:
-        dt = [(str(p), "<f8", (1,)) for p in names]
+        dt = [(str(p), "<f8") for p in names]
 
     #print(dt)
     struct = np.zeros(n, dtype=np.dtype(dt))
@@ -199,7 +204,7 @@ def chain_to_struct(chain, model=None, names=None):
         if indict:
             struct[p] = chain[p]
         else:
-            struct[p] = chain[:, inds]
+            struct[p] = np.squeeze(chain[:, inds])
 
     return struct
 
@@ -256,7 +261,7 @@ def fill_between(x, y1, y2=0, ax=None, linewidth=0, **kwargs):
     return p
 
 
-def violinplot(data, pos, widths, ax=None, 
+def violinplot(data, pos, widths, ax=None,
                violin_kwargs={"showextrema": False},
                color="slateblue", alpha=0.5, span=None, **extras):
     ndim = len(data)
@@ -392,8 +397,46 @@ def twodhist(x, y, ax=None, span=None, weights=None,
 
 def get_cmap(color, levels):
     nl = len(levels)
+    from matplotlib.colors import colorConverter
     rgba_color = colorConverter.to_rgba(color)
     contour_cmap = [list(rgba_color) for l in levels] + [list(rgba_color)]
     for i in range(nl+1):
         contour_cmap[i][-1] *= float(i) / (len(levels) + 1)
     return contour_cmap
+
+
+def marginal(x, ax=None, weights=None, span=None, smooth=0.02,
+             color='black', peak=None, **hist_kwargs):
+
+    if span is None:
+        span = get_spans(span, np.atleast_2d(x), weights=weights)[0]
+    ax.set_xlim(span)
+
+    # Generate distribution.
+    if smooth > 1:
+        # If `sx` > 1, plot a weighted histogram
+        #n, b, _ = ax.hist(x, bins=smooth, weights=weights, range=np.sort(span),
+        #                  color=color, **hist_kwargs)
+        #n, b = np.histogram(x, bins=smooth, weights=weights, range=np.sort(span))
+        xx, bins, wght = x, int(round(smooth)), weights
+    else:
+        # If `sx` < 1, oversample the data relative to the
+        # smoothing filter by a factor of 10, then use a Gaussian
+        # filter to smooth the results.
+        bins = int(round(10. / smooth))
+        n, b = np.histogram(x, bins=bins, weights=weights,
+                            range=np.sort(span))
+        n = norm_kde(n, 10.)
+        b0 = 0.5 * (b[1:] + b[:-1])
+        #n, b, _ = ax.hist(b0, bins=b, weights=n, range=np.sort(span),
+        #                  color=color, **hist_kwargs)
+        #n, b = np.histogram(b0, bins=b, weights=n, range=np.sort(span))
+        xx, bins, wght = b0, b, n
+
+    n, b = np.histogram(xx, bins=bins, weights=wght, range=np.sort(span))
+    if peak is not None:
+        wght = wght * peak / n.max()
+
+    n, b, _ = ax.hist(xx, bins=bins, weights=wght, range=np.sort(span),
+                      color=color, **hist_kwargs)
+    ax.set_ylim([0., max(n) * 1.05])

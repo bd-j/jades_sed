@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#SBATCH -J stochparfit_jades
+#SBATCH -J stochnonfit_jades
 #SBATCH -n 1 # Number of cores requested
 #SBATCH -N 1 # Ensure that all cores are on one machine
-#SBATCH -t 24:00:00 # Runtime 
+#SBATCH -t 72:00:00 # Runtime 
 #SBATCH -p conroy,shared # Partition to submit to
 #SBATCH --mem-per-cpu=2000 # Memory per node in MB (see also --mem-per-cpu)
 #SBATCH -o /n/scratchlfs/conroy_lab/bdjohnson/jades_sed/logs/stochnonfit_%A_%a.out # Standard out goes to this file

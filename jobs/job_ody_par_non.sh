@@ -14,6 +14,7 @@ source activate jades
 catalog=parametric_mist_ckc14.h5
 lsf_file=jwst_nirspec_prism_disp.fits
 sgroup=DEEP_R100_withSizes
+nbins_sfh=6
 # Do every 10th galaxy
 declare -i objid
 objid=${SLURM_ARRAY_TASK_ID}*10

@@ -47,6 +47,8 @@ if __name__ == '__main__':
                         help="If set, add dust emission to the model.")
     parser.add_argument('--add_neb', action="store_true",
                         help="If set, add nebular emission in the model (and mock).")
+    parser.add_argument('--nbins_sfh', type=int, default=8,
+                        help="Number of bins in the nonparametric sfh")
     # --- ssp ---
     parser.add_argument('--fullspec', action="store_true",
                         help="If set, generate the full wavelength array.")
