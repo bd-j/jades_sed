@@ -1,20 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
 import sys, os, glob, time
 import numpy as np
 import matplotlib.pyplot as pl
 import matplotlib
-from numpy.lib.recfunctions import append_fields
-
-import h5py
-from astropy.io import fits
 #import seaborn as sns
 
-from prospect.io.read_results import results_from
-from plotutils import sample_posterior, chain_to_struct
+from plotutils import sample_posterior, chain_to_struct, setup
 from plotutils import twodhist, get_cmap
 
-from dpost_par_par import construct_parameters, get_truths
+from transforms import construct_parameters, get_truths
 
 pl.rcParams["font.family"] = "serif"
 pl.rcParams["font.serif"] = ["STIXGeneral"]
@@ -26,20 +22,6 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14.h5")
-
-
-def setup(files):
-    results, observations, models = [], [], []
-    for fn in files:
-        try:
-            res, obs, model = results_from(fn)
-        except(OSError, KeyError):
-            print("Bad file: {}".format(fn))
-            continue
-        results.append(res)
-        observations.append(obs)
-        models.append(model)
-    return results, observations, models
 
 
 if __name__ == "__main__":
@@ -56,7 +38,7 @@ if __name__ == "__main__":
                for res in results]
     samples = [chain_to_struct(s, m, names=names) for s, m in zip(samples, models)]
     samples = construct_parameters(samples)
-    truths = get_truths(results)
+    truths = get_truths(results, catname=catname)
     truths = construct_parameters([truths])[0]
     redshifts = truths["zred"]
 
@@ -66,20 +48,20 @@ if __name__ == "__main__":
     zlims = [2, 3, 4, 5, 6, 7, 8]
 
     color = "royalblue"
-    levels = np.array([1.0 - np.exp(-0.5 * 1**2)] )  # 1-sigma
+    levels = np.array([1.0 - np.exp(-0.5 * 1**2)])  # 1-sigma
     #levels = 1.0 - np.exp(-0.5 * np.arange(0.5, 2.1, 0.5) ** 2)
     contour_cmap = get_cmap(color, levels)
     nbins = len(zlims) - 1
-    fig, axes = pl.subplots(3, 2, sharex="col", sharey="row", 
+    fig, axes = pl.subplots(3, 2, sharex="col", sharey="row",
                             figsize=(10.25, 11.5), squeeze=False)
-    tfig, taxes = pl.subplots(3, 2, sharex="col", sharey="row", 
-                             figsize=(10.25, 11.5), squeeze=False)
+    tfig, taxes = pl.subplots(3, 2, sharex="col", sharey="row",
+                              figsize=(10.25, 11.5), squeeze=False)
     for iz in range(nbins):
         ax = axes.flat[iz]
         tax = taxes.flat[iz]
         zlo, zhi = zlims[iz], zlims[iz + 1]
         choose = np.where((redshifts > zlo) & (redshifts < zhi))[0]
-        tax.plot(truths["mass"][choose], truths["sfr"][choose], 
+        tax.plot(truths["mass"][choose], truths["sfr"][choose],
                  marker="o", linestyle="", markersize=2)
         for idx in choose:
             p1 = np.squeeze(samples[idx][par1])

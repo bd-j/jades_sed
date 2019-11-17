@@ -5,18 +5,12 @@
 """
 
 import sys, os, glob, time
-from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as pl
 import matplotlib
-from numpy.lib.recfunctions import append_fields
 
-import h5py
-from astropy.io import fits
-
-from prospect.io.read_results import results_from
-from plotutils import sample_posterior, chain_to_struct
-from sfhplot import delay_tau_ssfr, delay_tau_mwa
+from transforms import construct_parameters, get_truths
+from plotutils import sample_posterior, chain_to_struct, setup
 
 
 pl.rcParams["font.family"] = "serif"
@@ -29,78 +23,6 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14.h5")
-
-
-def construct_parameters(parsets):
-    rectified_samples = []
-    # Add SFR to samples
-    for s in parsets:
-        ssfr = delay_tau_ssfr([s["tau"], s["tage"]])
-        sfr = ssfr * s["mass"]
-        mwa = delay_tau_mwa([s["tau"], s["tage"]])
-        cols = ["ssfr", "sfr", "agem"]
-        vals = [ssfr, sfr, mwa]
-        if (type(s) is dict):
-            print("updating dict")
-            s.update({c: v for c, v in zip(cols, vals)})
-            rectified_samples.append(deepcopy(s))
-        elif (type(s) is np.ndarray):
-            rectified_samples.append(append_fields(s, cols, vals))
-
-    return rectified_samples
-
-
-def beagle_to_fsps(beagle):
-    fpars = {}
-    # Basic
-    fpars["mass"] = 10**beagle["mass"]
-    fpars["zred"] = beagle["redshift"]
-    fpars["sfr"] = 10**beagle["sfr"]
-    # SFH
-    fpars["tage"] = 10**(beagle["max_stellar_age"] - 9)
-    fpars["tau"] = 10**(beagle["tau"] - 9)
-    fpars["logzsol"] = beagle["metallicity"]
-    # Dust
-    mu, tveff = 0.4, beagle["tauV_eff"]
-    fpars["dust2"] = mu * tveff
-    fpars["dust_ratio"] = 1.5
-    # Neb
-    fpars["gas_logu"] = beagle["nebular_logU"]
-    fpars["gas_logz"] = beagle["metallicity"]
-
-    return fpars
-
-
-def get_truths(results, catname=catname):
-    jcat = []
-    with h5py.File(catname, "r") as catalog:
-        for res in results:
-            objid = res["run_params"]["objid"]
-            jcat.append(catalog[str(objid)]["beagle_parameters"][()])
-
-    jcat = np.hstack(jcat)
-    fcat = beagle_to_fsps(jcat)
-    #for k, v in fcat.items():
-        #try:
-        #    fcat[k] = v[:, None]
-        #except(TypeError):
-        #    continue
-    #jcat = convert(jcat)
-    return fcat
-
-
-def setup(files):
-    results, observations, models = [], [], []
-    for fn in files:
-        try:
-            res, obs, model = results_from(fn)
-        except(OSError, KeyError):
-            print("Bad file: {}".format(fn))
-            continue
-        results.append(res)
-        observations.append(obs)
-        models.append(model)
-    return results, observations, models
 
 
 if __name__ == "__main__":

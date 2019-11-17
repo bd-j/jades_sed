@@ -154,19 +154,19 @@ def _quantile(x, q, weights=None):
         return quantiles
 
 
-def setup(files, sps=0):
-    from prospect.io import read_results as reader
-    blob = [reader.results_from(f) for f in files]
-    obs = [b[1] for b in blob]
-    results = [b[0] for b in blob]
-    models = [b[2] for b in blob]
-
-    if sps == 0:
-        sps = reader.get_sps(results[0])
-    elif sps > 0:
-        sps = [reader.get_sps(r) for r in results]
-
-    return results, obs, models, sps
+def setup(files):
+    from prospect.io.read_results import results_from
+    results, observations, models = [], [], []
+    for fn in files:
+        try:
+            res, obs, model = results_from(fn)
+        except(OSError, KeyError):
+            print("Bad file: {}".format(fn))
+            continue
+        results.append(res)
+        observations.append(obs)
+        models.append(model)
+    return results, observations, models
 
 
 def chain_to_struct(chain, model=None, names=None):
