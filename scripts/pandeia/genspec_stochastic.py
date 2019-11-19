@@ -11,7 +11,8 @@ from astropy.io import fits
 from astropy.cosmology import Planck15 as cosmo
 
 from prospect import prospect_args
-from stochastic_fsps import uni, build_model, build_sps, build_obs
+from jadespro import uni
+from jadespro.parfiles.stochastic_fsps import build_model, build_sps, build_obs
 
 
 # Observed redshift range

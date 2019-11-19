@@ -31,3 +31,6 @@ python setup.py install
 cd ~/codes/prospector
 python setup.py install
 
+# jadespro
+cd ~/codes/jades_sed
+python setup.py install

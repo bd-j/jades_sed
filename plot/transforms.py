@@ -10,6 +10,7 @@ import h5py
 from astropy.io import fits
 
 from sfhplot import delay_tau_ssfr, delay_tau_mwa
+from sfhplot import ratios_to_sfrs, nonpar_mwa
 
 
 def construct_parameters(parsets):
@@ -52,6 +53,34 @@ def construct_stoch_parameters(parsets):
             rectified_samples.append(append_fields(s, cols, vals))
 
     return rectified_samples
+
+
+def construct_nonpar_parameters(parsets, agebins=[[]]):
+    rectified_samples = []
+    # Add SFR to samples
+    for s in parsets:
+        #zred = s["redshift"]
+        logmass = s["logmass"]
+        logsfr_ratios = s["logsfr_ratios"]
+        sfhs = np.array([ratios_to_sfrs(logm, sr, agebins)
+                        for logm, sr in zip(logmass, logsfr_ratios)])
+        mwa = np.array([nonpar_mwa(logm, sr, agebins)
+                        for logm, sr in zip(logmass, logsfr_ratios)])
+        mtot = 10**logmass
+        sfr = sfhs[0]
+        ssfr = sfr / mtot
+
+        cols = ["ssfr", "sfr", "sfr1", "totmass", "agem"]
+        vals = [ssfr, sfh, sfr, mtot, mwa, zred]
+        if (type(s) is dict):
+            print("updating dict")
+            s.update({c: v for c, v in zip(cols, vals)})
+            rectified_samples.append(deepcopy(s))
+        elif (type(s) is np.ndarray):
+            rectified_samples.append(append_fields(s, cols, vals))
+
+    return rectified_samples
+
 
 
 def get_stoch_truths(results, catname=""):

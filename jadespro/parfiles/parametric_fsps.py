@@ -31,13 +31,6 @@ except:
 # --------------
 
 
-def uni(x):
-    if sys.version_info >= (3,):
-        return x.decode()
-    else:
-        return x
-
-
 def build_model(fixed_metallicity=None, add_duste=False, add_neb=True,
                 object_redshift=None, library_resolution=500, sublibres=False,
                 smoothstars=False, **extras):

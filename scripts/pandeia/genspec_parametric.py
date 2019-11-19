@@ -15,7 +15,8 @@ import numpy as np
 from astropy.io import fits
 
 from prospect import prospect_args
-from parametric_fsps import uni, build_model, build_sps, build_obs
+from jadespro import uni
+from jadespro.parfiles.parametric_fsps import build_model, build_sps, build_obs
 
 
 if __name__ == '__main__':

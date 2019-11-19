@@ -13,7 +13,8 @@ import h5py
 from prospect.fitting import fit_model
 from prospect.io import write_results as writer
 
-from parametric_fsps import build_model, build_sps, build_obs, uni
+from jadespro.parfiles.parametric_fsps import build_model, build_sps, build_obs
+from jadespro import uni
 
 # -----------
 # Everything

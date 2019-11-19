@@ -9,7 +9,7 @@ import time, sys
 from copy import deepcopy
 import numpy as np
 
-from parametric_fsps import build_sps, uni
+from .parametric_fsps import build_sps
 
 
 def build_model(ncomp=1, add_duste=False, add_neb=True, **extras):
@@ -61,13 +61,13 @@ def build_model(ncomp=1, add_duste=False, add_neb=True, **extras):
 
 def build_obs(objid=0, datafile="", seed=0, sps=None,
               fullspec=True, sgroup="DEEP_R100", **kwargs):
-    
+
     from prospect.utils.obsutils import fix_obs
 
     # Get stochastic parameters and S/N for this object
     wave, snr, scat = get_stochastic(objid, datafile=datafile, sgroup=sgroup)
     fsps_pars, ncomp = stochastic_to_fsps(scat)
-    
+
     # now get a model, set it to the input values, and compute
     model = build_model(ncomp=ncomp, **kwargs)
     model.params.update(fsps_pars)
@@ -85,10 +85,10 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
     else:
         assert wave is not None
     obs = {"wavelength": wave, "spectrum": None, "filters": None}
-    
+
     # Generate model
     spec, phot, mfrac = model.mean_model(model.theta, sps=sps, obs=obs)
-    
+
     # make some noise in here
     unc = spec / np.clip(snr, 1e-2, np.inf)
     if int(seed) > 0:
@@ -116,9 +116,9 @@ def build_obs(objid=0, datafile="", seed=0, sps=None,
 
 
 def stochastic_to_fsps(cat):
-    
+
     ncomp = int(cat["nburst"] + 1)
-    
+
     fpars = {}
     fpars["mass"]  = cat["mass"][0, :ncomp]
     fpars["sfh"]   = cat["sfh"][0, :ncomp]
@@ -126,7 +126,7 @@ def stochastic_to_fsps(cat):
     fpars["const"] = cat["const"][0, :ncomp]
     fpars["zred"]  = cat["redshift"]
     fpars["logzsol"] = cat["metallicity"]
-    
+
     mu, tveff = 0.4, cat["tauV_eff"]
     fpars["dust2"] = mu * tveff
     fpars["dust_ratio"] = 1.5
@@ -194,11 +194,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     run_params = vars(args)
     run_params["object_redshift"] = 4.0
-    
+
     model = build_model(**run_params)
     print(model)
     sys.exit()
-    
+
     #sps = build_sps(**run_params)
     run_params["sps_libraries"] = sps.ssp.libraries
     run_params["param_file"] = __file__
