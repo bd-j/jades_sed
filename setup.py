@@ -13,14 +13,14 @@ except ImportError:
     from distutils.core import setup
     setup
 
-    
+
 setup(
     name="jadespro",
     url="https://github.com/bd-j/jades_sed/",
     version="0.1",
     author="",
     author_email="benjamin.johnson@cfa.harvard.edu",
-    packages=["jadespro"],
+    packages=["jadespro", "jadespro.parfiles"],
     license="LICENSE",
     description="Fitting NIRSPEC with prospector",
     #long_description=open("README.md").read(),
