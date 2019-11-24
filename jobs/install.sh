@@ -34,3 +34,8 @@ python setup.py install
 # jadespro
 cd ~/codes/jades_sed
 python setup.py install
+
+# copy relevant scripts
+cd $jadesdir
+cp ~/codes/jades_sed/scripts/fitting/fit*py .
+cp ~/codes/jades_sed/jobs/job_ody*sh .

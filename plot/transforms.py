@@ -64,14 +64,13 @@ def construct_nonpar_parameters(parsets, agebins=[[]]):
         logsfr_ratios = s["logsfr_ratios"]
         sfhs = np.array([ratios_to_sfrs(logm, sr, agebins)
                         for logm, sr in zip(logmass, logsfr_ratios)])
-        mwa = np.array([nonpar_mwa(logm, sr, agebins)
-                        for logm, sr in zip(logmass, logsfr_ratios)])
+        mwa = nonpar_mwa(logmass, logsfr_ratios, agebins)
         mtot = 10**logmass
-        sfr = sfhs[0]
+        sfr = sfhs[:, 0]
         ssfr = sfr / mtot
 
-        cols = ["ssfr", "sfr", "sfr1", "totmass", "agem"]
-        vals = [ssfr, sfh, sfr, mtot, mwa, zred]
+        cols = ["ssfr", "sfr1", "totmass", "agem"]
+        vals = [ssfr, sfr, mtot, mwa]
         if (type(s) is dict):
             print("updating dict")
             s.update({c: v for c, v in zip(cols, vals)})
