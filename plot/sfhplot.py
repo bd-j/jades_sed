@@ -84,7 +84,7 @@ def stoch_params_to_sfh(params, sig=0.01):
         SFR, in Msun/yr
     """
     tuniv = cosmo.age(params["redshift"]).to("Gyr").value
-    nt = max(tuniv*2/sig, 1000)
+    nt = max(tuniv*2*10/sig, 1000)
     lookback = np.linspace(0, tuniv, nt)
     sfr = np.zeros_like(lookback)
     const = params["mass"][0] / params["tage"][0]
@@ -93,8 +93,9 @@ def stoch_params_to_sfh(params, sig=0.01):
     stop = params["nburst"] + 1
     tb = params["tage"][1:stop]
     mb = params["mass"][1:stop]
-    exparg = -0.5 * ((lookback[:, None] - tb[None, :]) / sig)**2 
-    bs = mb / (sig*np.sqrt(2*np.pi)) * np.exp(exparg)
+    sb = sig #* tb
+    exparg = -0.5 * ((lookback[:, None] - tb[None, :]) / sb)**2 
+    bs = mb / (sb*np.sqrt(2*np.pi)) * np.exp(exparg)
     sfr += bs.sum(axis=-1)
 
     return lookback, sfr * 1e-9

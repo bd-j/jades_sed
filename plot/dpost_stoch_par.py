@@ -10,7 +10,6 @@ import matplotlib.pyplot as pl
 import matplotlib
 from matplotlib.backends.backend_pdf import PdfPages
 
-from prospect.io.read_results import results_from
 from plotutils import sample_posterior, chain_to_struct, setup
 from transforms import construct_parameters, construct_stoch_parameters
 from transforms import get_stoch_truths
@@ -27,9 +26,12 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/stochastic_mist_ckc14.h5")
 
+pretty = {"mass": "M*", "sfr": "SFR", "agem": "<t>_m (Gyr)"}
+truthpar = {"mass": "totmass", "sfr": "sfr", "agem": "agem"}
+fitpar = {"mass": "mass", "sfr": "sfr", "agem": "agem"}
 
-def delta_plot(parameter="mass", tparameter="totmass",
-               xparam="totmass", nsample=500):
+
+def delta_plot(parameter="mass", xparam="mass", nsample=500):
 
     ftype = "stochastic_parametric"
     search = "/Users/bjohnson/Projects/jades_d2s5/jobs/output/v2/{}*h5"
@@ -44,13 +46,9 @@ def delta_plot(parameter="mass", tparameter="totmass",
     samples = construct_parameters(samples)
     truths = get_stoch_truths(results, catname=catname)
     truths = construct_stoch_parameters([truths])[0]
-
-    #sys.exit()
+    tparameter = truthpar[parameter]
 
     redshifts = truths["zred"]
-
-    #sys.exit()
-
     zlims = [5, 6, 7, 8]
 
     cmap = matplotlib.cm.get_cmap('viridis')
@@ -60,11 +58,11 @@ def delta_plot(parameter="mass", tparameter="totmass",
         ax = axes[iz]
         zlo, zhi = zlims[iz], zlims[iz + 1]
         choose = ((redshifts > zlo) & (redshifts < zhi))
-        if choose.sum() == 1:
+        if choose.sum() < 1:
             continue
-        dataset = [(np.squeeze(s[parameter]) / truths[tparameter][i])
+        dataset = [(np.squeeze(s[fitpar[parameter]]) / truths[tparameter][i])
                    for i, s in enumerate(samples) if choose[i]]
-        positions = np.log10(truths[xparam][choose])
+        positions = np.log10(truths[truthpar[xparam]][choose])
 
         vparts = ax.violinplot(dataset, positions, widths=0.15,
                                showmedians=False, showmeans=False,
@@ -96,12 +94,12 @@ def delta_plot(parameter="mass", tparameter="totmass",
 
 if __name__ == "__main__":
 
-    with PdfPages("delta_stochastic_parametric.pdf") as pdf:
-        fig, axes = delta_plot(parameter="mass", tparameter="totmass")
+    with PdfPages("figures/deltaX_stochastic_parametric.pdf") as pdf:
+        fig, axes = delta_plot(parameter="mass")
         pdf.savefig(fig)
         pl.close(fig)
-        fig, axes = delta_plot(parameter="sfr", tparameter="sfr")
+        fig, axes = delta_plot(parameter="sfr")
         pdf.savefig(fig)
         pl.close(fig)
-        fig, axes = delta_plot(parameter="agem", tparameter="agem")
+        fig, axes = delta_plot(parameter="agem")
         pdf.savefig(fig)

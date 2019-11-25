@@ -10,8 +10,11 @@ import matplotlib.pyplot as pl
 import matplotlib
 from matplotlib.backends.backend_pdf import PdfPages
 
+import jadespro.parfiles.nonparametric_fsps as parfile
+
 from plotutils import sample_posterior, chain_to_struct, setup
-from transforms import construct_parameters, get_truths
+from transforms import construct_parameters, construct_nonpar_parameters
+from transforms import get_truths
 
 
 pl.rcParams["font.family"] = "serif"
@@ -25,39 +28,48 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14.h5")
 
+pretty = {"mass": "M*", "sfr": "SFR", "agem": "<t>_m (Gyr)"}
+truthpar = {"mass": "mass", "sfr": "sfr", "agem": "agem"}
+fitpar = {"mass": "totmass", "sfr": "sfr1", "agem": "agem"}
 
-def delta_plot(parameter="mass", tparameter="mass",
-               xparam="mass", nsample=500):
 
-    ftype = "parametric_parametric"
+def delta_plot(parameter="mass", xparam="mass", nsample=500):
+
+    ftype = "parametric_nonparametric"
     search = "/Users/bjohnson/Projects/jades_d2s5/jobs/output/v2/{}*h5"
     files = glob.glob(search.format(ftype))
     results, obs, models = setup(files)
     names = results[0]["theta_labels"]
+    if models[0] is None:
+        models = [parfile.build_model(**r["run_params"]) for r in results]
+    agebins = [m.params["agebins"].copy() for m in models]
 
     # --- construct samples ----
     samples = [sample_posterior(res["chain"], res["weights"], nsample=nsample)
                for res in results]
-    samples = [chain_to_struct(s, m, names=names) for s, m in zip(samples, models)]
-    samples = construct_parameters(samples)
+    samples = [chain_to_struct(s, m, names=names) 
+               for s, m in zip(samples, models)]
+    samples = [construct_nonpar_parameters([s], agebins=a)[0]
+               for s, a in zip(samples, agebins)]
     truths = get_truths(results, catname=catname)
     truths = construct_parameters([truths])[0]
+    tparameter = truthpar[parameter]
 
     redshifts = truths["zred"]
-    zlims = [2, 3, 4, 5, 6, 7]
+    zlims = [3, 4, 5]
 
     cmap = matplotlib.cm.get_cmap('viridis')
     nbins = len(zlims) - 1
     fig, axes = pl.subplots(nbins, 1, sharex="col", figsize=(10.5, 9.5))
     for iz in range(nbins):
-        ax = axes[iz]
         zlo, zhi = zlims[iz], zlims[iz + 1]
         choose = ((redshifts > zlo) & (redshifts < zhi))
         if choose.sum() < 1:
             continue
-        dataset = [(np.squeeze(s[parameter]) / truths[parameter][i])
+        ax = axes[iz]
+        dataset = [(np.squeeze(s[fitpar[parameter]]) / truths[tparameter][i])
                    for i, s in enumerate(samples) if choose[i]]
-        positions = np.log10(truths[xparam][choose])
+        positions = np.log10(truths[truthpar[xparam]][choose])
 
         vparts = ax.violinplot(dataset, positions, widths=0.15,
                                showmedians=False, showmeans=False,
@@ -89,12 +101,15 @@ def delta_plot(parameter="mass", tparameter="mass",
 
 if __name__ == "__main__":
 
-    with PdfPages("figures/deltaX_parametric_parametric.pdf") as pdf:
-        fig, axes = delta_plot(parameter="mass", tparameter="mass")
+    with PdfPages("figures/deltaX_parametric_nonparametric.pdf") as pdf:
+        fig, axes = delta_plot(parameter="mass")
+        [ax.set_xlim(7, 10) for ax in axes]
         pdf.savefig(fig)
         pl.close(fig)
-        fig, axes = delta_plot(parameter="sfr", tparameter="sfr")
+        fig, axes = delta_plot(parameter="sfr")
+        [ax.set_xlim(7, 10) for ax in axes]
         pdf.savefig(fig)
         pl.close(fig)
-        fig, axes = delta_plot(parameter="agem", tparameter="agem")
+        fig, axes = delta_plot(parameter="agem")
+        [ax.set_xlim(6.8, 9.5) for ax in axes]
         pdf.savefig(fig)

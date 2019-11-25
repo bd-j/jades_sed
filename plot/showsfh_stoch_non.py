@@ -14,9 +14,9 @@ import jadespro.parfiles.nonparametric_fsps as parfile
 from plotutils import chain_to_struct, marginal, sample_posterior
 from showspec import show_best_spec
 import sfhplot
-from transforms import construct_parameters, construct_stoch_parameters
-from transforms import construct_nonpar_parameters
-from transforms import get_truths, get_stoch_truths
+
+from transforms import construct_nonpar_parameters, construct_stoch_parameters
+from transforms import get_stoch_truths
 
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.gridspec import GridSpec
@@ -30,7 +30,7 @@ rcParams['mathtext.it'] = 'serif:italic'
 
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
-           "noisy_spectra/parametric_mist_ckc14.h5")
+           "noisy_spectra/stochastic_mist_ckc14.h5")
 
 
 def get_axes(figsize=None):
@@ -44,14 +44,12 @@ def get_axes(figsize=None):
     paxes = [fig.add_subplot(gs[2, i]) for i in range(3)]
     return fig, saxes, haxes, paxes
 
+def prettify():
+    pass
 
 pretty = {"mass": "M*", "sfr": "SFR", "agem": "<t>_m (Gyr)"}
-truthpar = {"mass": "mass", "sfr": "sfr", "agem": "agem"}
+truthpar = {"mass": "totmass", "sfr": "sfr", "agem": "agem"}
 fitpar = {"mass": "totmass", "sfr": "sfr1", "agem": "agem"}
-
-
-def rectify_par_non(res, model, nsample):
-    pass
 
 
 def show(fn, nsample=1000, figsize=None):
@@ -72,24 +70,22 @@ def show(fn, nsample=1000, figsize=None):
     samples = sample_posterior(res["chain"], res["weights"], nsample=nsample)
     samples = chain_to_struct(samples, model)
     samples = construct_nonpar_parameters([samples], agebins=agebins)[0]
-    truths = get_truths([res], catname=catname)
-    truths = construct_parameters([truths])[0]
+    truths = get_stoch_truths([res], catname=catname)
+    truths = construct_stoch_parameters([truths])[0]
 
     # get sfhs
-    times = np.linspace(0, 10**(agebins.max()-9), 1000)
-    st, ss, _ = sfhplot.params_to_sfh(truths, time=times)
+    st, ss = sfhplot.stoch_params_to_sfh(truths[0], sig=0.01)
     npt, nps, _ = sfhplot.params_to_sfh(samples, agebins=agebins)
 
     pars = ["mass", "sfr", "agem"]
     x = np.array([np.squeeze(samples[fitpar[p]]) for p in pars])
 
-    # make spec + sfh plots
     fig, sax, hax, daxes = get_axes(figsize=figsize)
-    sax = show_best_spec(res, sax)
+    sax = show_best_spec(res, ax=sax)
     hax = sfhplot.show_sfh(npt, sfrs=nps, ax=hax, post_kwargs=par_kwargs)
-    hax.plot(st, ss[0], **truth_kwargs)
+    hax.plot(st, ss, **truth_kwargs)
 
-    # prettification
+    # Prettification
     hax.set_xlabel("lookback time (Gyr)")
     hax.set_ylabel("SFR")
     sax.set_xlabel(r"$\lambda \, (\mu m)$")
@@ -97,6 +93,10 @@ def show(fn, nsample=1000, figsize=None):
     sax.set_title("object {}; $z$={:3.2f}, median snr={:3.1f}".format(objid, obs["object_redshift"], snr))
     sax.legend()
     sax.set_xlim(0.5, 5.2)
+
+    mc, mb = np.log10(truths[0]["mass"][0]), np.log10(truths[0]["mass"][1:].sum())
+    hax.text(0.1, 0.8, "logm_const={:2.1f}\nlogm_bursts={:2.1f}".format(mc, mb),
+             transform=hax.transAxes)
 
     for i, p in enumerate(pars):
         ax = daxes[i]
@@ -117,13 +117,17 @@ def show(fn, nsample=1000, figsize=None):
 
 if __name__ == "__main__":
 
-    ftype = "parametric_nonparametric"
+    ftype = "stochastic_nonparametric"
     search = "/Users/bjohnson/Projects/jades_d2s5/jobs/output/v2/{}_{}*h5"
     files = glob.glob(search.format(ftype, ""))
     figsize = (7, 7)
 
     with PdfPages("figures/{}_sfhs.pdf".format(ftype)) as pdf:
         for fn in files:
+            #try:
+            print(fn)
             fig, s, h, d = show(fn, figsize=figsize)
+            #except(ValueError):
+            #    continue
             pdf.savefig(fig)
             pl.close(fig)
