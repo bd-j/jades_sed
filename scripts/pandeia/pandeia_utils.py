@@ -1,10 +1,14 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 import numpy as np
 from pandeia.engine.calc_utils import build_default_calc
 from pandeia.engine.perform_calculation import perform_calculation
 import pandeia.engine
 
 
-# This script was adapted from a short script written by Michael Maseda
+# This code is taken almost entirely from a script by Emma Curtis-Lake (IoA),
+# which was heavily modified from a short script written by Michael Maseda
 # demonstrating how to set up emission line S/N calculations in pandeia.
 
 filterWlDict = {'clear':{'low':0.7,'high':5.1},

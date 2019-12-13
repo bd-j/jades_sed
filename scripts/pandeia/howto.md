@@ -17,10 +17,14 @@ python genspec_stochastic.py --add_neb --smoothssp=False --fullspec --outroot=st
 
 # Generate observed spectra and S/N estimates
 
-Then we use `fsps_output_to_pandeia` to generate observed spectra (which we will
-not use) and S/N estimates as a function of wavelength (which we will use).
-These S/N estimates can incorporate size information (and hence slit losses) or
-not.  Note that because pandeia does not account for input library spectral resolution when convolving with the line spread funct, the output spectra will be broader than reality and the S/N estimates will be approximate.  Note also that pandeia accounts for undersampling of the LSF in a way that we do not.
+Then we use `fsps_output_to_pandeia` -- thanks to E. Curtis-Lake -- to generate
+observed spectra (which we will not use) and S/N estimates as a function of
+wavelength (which we will use). These S/N estimates can incorporate size
+information (and hence slit losses) or not.  Note that because pandeia does not
+account for input library spectral resolution when convolving with the line
+spread function, the output spectra will be broader than reality and the S/N
+estimates will be approximate.  Note also that pandeia accounts for
+undersampling of the LSF in a way that we do not.
 
 ```bash
 python fsps_output_to_pandeia.py --spectrum_file=parametric_mist_ckc14.h5 --use_sizes --nobj=5000
