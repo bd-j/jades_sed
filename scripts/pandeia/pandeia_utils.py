@@ -65,11 +65,14 @@ def sn_user_spec(inputs, disperser='prism', filt='clear',
     if (inputs['re_circ'] > 0):
         sersic = inputs['sersic_n']
         rc = inputs['re_circ']
+        rem = inputs['re_maj']
         ellip = 1. - inputs['axis_ratio']
         pa = inputs['position_angle']
 
         # pandiea wants scale lengths not half-light radii
-        major_axis, minor_axis = majorminor(sersic, rc, ellip)
+        #major_axis, minor_axis = majorminor(sersic, rc, ellip)
+        # actually, pandeia is happy with half-light radii (since at least v1.5)
+        major_axis, minor_axis = rem, rem * inputs['axis_ratio']
         scene['position'] = {'x_offset': xoff, 'y_offset': yoff, 'orientation': pa,
                              'position_parameters': ['x_offset', 'y_offset', 'orientation']}
         scene['shape'] = {'geometry': 'sersic', 'sersic_index': sersic,

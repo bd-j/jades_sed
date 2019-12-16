@@ -140,6 +140,7 @@ def build_input(iobj, args):
         inputs['re_circ'] = (sizes['Re_maj'] *
                              np.sqrt(sizes['axis_ratio'])
                              )
+        inputs['re_maj'] = sizes['Re_maj']
         #if 'ID' in sizes.dtype.names:
         #    inputs["ID"] = sizes["ID"]
 
