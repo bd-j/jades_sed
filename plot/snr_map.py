@@ -20,15 +20,15 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 mock, sgroup = "parametric", "DEEP_R100_withSizes"
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
-           "noisy_spectra/{}_mist_ckc14.h5")
+           "noisy_spectra/{}_mist_ckc14_rhalf.h5")
 catname = catname.format(mock)
 
 
 def get_snr():
     pass
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
 
     zlims = [2, 3, 4, 5, 6, 7]
 
@@ -84,6 +84,6 @@ if __name__ == "__main__":
     axes[0, 0].set_title("Mock={}; {}".format(mock, sgroup))
     axes[0, 1].set_title("Mock={}; S/N={}".format(mock, sgroup))
 
-    fig.savefig("figures/snr_map.png", dpi=600)
+    fig.savefig("figures/snr_map.pdf", dpi=600)
     pl.show()
     sys.exit()

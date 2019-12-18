@@ -23,15 +23,16 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
-           "noisy_spectra/parametric_mist_ckc14.h5")
+           "noisy_spectra/parametric_mist_ckc14_rscale.h5")
+
+pretty = {"mass": "M*", "sfr": "SFR", "agem": "<t>_m (Gyr)"}
+truthpar = {"mass": "mass", "sfr": "sfr", "agem": "agem"}
+fitpar = truthpar
 
 
-def delta_plot(parameter="mass", tparameter="mass",
-               xparam="mass", nsample=500):
+def single_delta_plot(files, ax=None, parameter="mass", xparam="mass",
+                      tparameter="mass", zlims=(2, 7), nsample=500):
 
-    ftype = "parametric_parametric"
-    search = "/Users/bjohnson/Projects/jades_d2s5/jobs/output/v2/{}*h5"
-    files = glob.glob(search.format(ftype))
     results, obs, models = setup(files)
     names = results[0]["theta_labels"]
 
@@ -44,57 +45,67 @@ def delta_plot(parameter="mass", tparameter="mass",
     truths = construct_parameters([truths])[0]
 
     redshifts = truths["zred"]
-    zlims = [2, 3, 4, 5, 6, 7]
+    zlo, zhi = zlims
 
+    # --- Plot setup ---
+    if ax is None:
+        fig, ax = pl.subplots()
+    else:
+        fig = None
+    choose = ((redshifts > zlo) & (redshifts < zhi))
+    if choose.sum() < 1:
+        return fig, ax
+    # colorbar and prettify
+    pmin, pmax = zlo, zhi
     cmap = matplotlib.cm.get_cmap('viridis')
-    nbins = len(zlims) - 1
-    fig, axes = pl.subplots(nbins, 1, sharex="col", figsize=(10.5, 9.5))
-    for iz in range(nbins):
-        ax = axes[iz]
-        zlo, zhi = zlims[iz], zlims[iz + 1]
-        choose = ((redshifts > zlo) & (redshifts < zhi))
-        if choose.sum() < 1:
-            continue
-        dataset = [(np.squeeze(s[parameter]) / truths[parameter][i])
-                   for i, s in enumerate(samples) if choose[i]]
-        positions = np.log10(truths[xparam][choose])
-
-        vparts = ax.violinplot(dataset, positions, widths=0.15,
-                               showmedians=False, showmeans=False,
-                               showextrema=False)
-
-        #pmin, pmax = thist["redshift"].min(), thist["redshift"].max()
-        pmin, pmax = zlo, zhi
-        norm = matplotlib.colors.Normalize(vmin=pmin, vmax=pmax)
-        zreds = (redshifts[choose] - pmin) / (pmax - pmin)
-
-        for z, pc in zip(zreds, vparts['bodies']):
-            pc.set_facecolor(cmap(z))
-            pc.set_edgecolor(cmap(z))
-            pc.set_alpha(0.5)
-
-        # colorbar and prettify
+    norm = matplotlib.colors.Normalize(vmin=pmin, vmax=pmax)
+    if fig is not None:
         cbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
         cbar.set_label("redshift")
-        ax.axhline(1.00, linestyle=":", color="k")
-        ax.set_ylabel(r"${}\, /\, {}_{{input}}$".format(parameter, parameter))
+
+    # --- Plot data ---
+    dataset = [(np.squeeze(s[parameter]) / truths[parameter][i])
+               for i, s in enumerate(samples) if choose[i]]
+    positions = np.log10(truths[xparam][choose])
+
+    vparts = ax.violinplot(dataset, positions, widths=0.15,
+                           showmedians=False, showmeans=False,
+                           showextrema=False)
+
+    zreds = (redshifts[choose] - pmin) / (pmax - pmin)
+    for z, pc in zip(zreds, vparts['bodies']):
+        pc.set_facecolor(cmap(z))
+        pc.set_edgecolor(cmap(z))
+        pc.set_alpha(0.5)
+
+    #  --- prettify ----
+    ax.axhline(1.00, linestyle=":", color="k")
+    ax.set_ylabel(r"${}\, /\, {}_{{input}}$".format(parameter, parameter))
 
     ax.set_xlabel(r"$\log \, ({}_{{\rm input}})$".format(xparam), fontsize=14)
-    [ax.set_ylim(0.1, 2.5) for ax in axes]
-    axes[0].set_title("Mock={}; Model={}; S/N=DEEP with sizes".format(*ftype.split("_")))
-    #fig.savefig("figures/delta_{}.png".format(parameter), dpi=600)
-    #pl.show()
-    return fig, axes
+    ax.set_ylim(0.1, 2.5)
+    return fig, ax
 
 
 if __name__ == "__main__":
 
+    ftype = "parametric_parametric"
+    search = "/Users/bjohnson/Projects/jades_d2s5/jobs/output/v2/{}*h5"
+    files = glob.glob(search.format(ftype))
+    tag = "Mock={}\nModel={}\nS/N=DEEP with sizes".format(*ftype.split("_"))
+
+    zlims = [2, 3, 4, 5, 6, 7]
+    nbins = len(zlims) - 1
+
     with PdfPages("figures/deltaX_parametric_parametric.pdf") as pdf:
-        fig, axes = delta_plot(parameter="mass", tparameter="mass")
-        pdf.savefig(fig)
-        pl.close(fig)
-        fig, axes = delta_plot(parameter="sfr", tparameter="sfr")
-        pdf.savefig(fig)
-        pl.close(fig)
-        fig, axes = delta_plot(parameter="agem", tparameter="agem")
-        pdf.savefig(fig)
+        for par in ["mass", "sfr", "agem"]:
+            fig, axes = pl.subplots(nbins, 1, sharex="col", figsize=(10.5, 9.5))
+            for iz in range(nbins):
+                zl = (zlims[iz], zlims[iz+1])
+                _, ax = single_delta_plot(files, ax=axes[iz], parameter=par,
+                                          zlims=zl)
+                ax.text(0.8, 0.75, "${:3.1f} < z <  {:3.1f}$".format(*zl), transform=ax.transAxes)
+            [ax.set_xlim(7, 10) for ax in axes]
+            axes[0].set_title(tag.replace("\n", ", "))
+            pdf.savefig(fig)
+            pl.close(fig)
