@@ -28,7 +28,7 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14_rscale.h5")
 
-pretty = {"mass": "M*", "sfr": "SFR", "agem": "<t>_m (Gyr)"}
+pretty = {"mass": "M_*", "sfr": "SFR", "agem": "<t>_m"}
 truthpar = {"mass": "mass", "sfr": "sfr", "agem": "agem"}
 fitpar = {"mass": "totmass", "sfr": "sfr1", "agem": "agem"}
 
@@ -89,7 +89,7 @@ def single_delta_plot(files, ax=None, parameter="mass", xparam="mass",
 
     # --- Prettify ----
     ax.axhline(1.00, linestyle=":", color="k")
-    ax.set_ylabel(r"${}\, /\, {}_{{input}}$".format(pretty[parameter], pretty[parameter]))
+    ax.set_ylabel(r"${}$ (output / input)".format(pretty[parameter]))
 
     ax.set_xlabel(r"$\log \, ({}_{{\rm input}})$".format(xparam), fontsize=14)
     ax.set_ylim(0.1, 2.5)

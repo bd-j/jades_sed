@@ -25,7 +25,7 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
            "noisy_spectra/parametric_mist_ckc14_rscale.h5")
 
-pretty = {"mass": "M*", "sfr": "SFR", "agem": "<t>_m (Gyr)"}
+pretty = {"mass": "M_*", "sfr": "SFR", "agem": "<t>_m"}
 truthpar = {"mass": "mass", "sfr": "sfr", "agem": "agem"}
 fitpar = truthpar
 
@@ -39,7 +39,8 @@ def single_delta_plot(files, ax=None, parameter="mass", xparam="mass",
     # --- construct samples ----
     samples = [sample_posterior(res["chain"], res["weights"], nsample=nsample)
                for res in results]
-    samples = [chain_to_struct(s, m, names=names) for s, m in zip(samples, models)]
+    samples = [chain_to_struct(s, m, names=names)
+               for s, m in zip(samples, models)]
     samples = construct_parameters(samples)
     truths = get_truths(results, catname=catname)
     truths = construct_parameters([truths])[0]
@@ -67,7 +68,6 @@ def single_delta_plot(files, ax=None, parameter="mass", xparam="mass",
     dataset = [(np.squeeze(s[parameter]) / truths[parameter][i])
                for i, s in enumerate(samples) if choose[i]]
     positions = np.log10(truths[xparam][choose])
-
     vparts = ax.violinplot(dataset, positions, widths=0.15,
                            showmedians=False, showmeans=False,
                            showextrema=False)
@@ -80,8 +80,7 @@ def single_delta_plot(files, ax=None, parameter="mass", xparam="mass",
 
     #  --- prettify ----
     ax.axhline(1.00, linestyle=":", color="k")
-    ax.set_ylabel(r"${}\, /\, {}_{{input}}$".format(parameter, parameter))
-
+    ax.set_ylabel(r"${}$ (output / input)".format(pretty[parameter]))
     ax.set_xlabel(r"$\log \, ({}_{{\rm input}})$".format(xparam), fontsize=14)
     ax.set_ylim(0.1, 2.5)
     return fig, ax
@@ -101,10 +100,11 @@ if __name__ == "__main__":
         for par in ["mass", "sfr", "agem"]:
             fig, axes = pl.subplots(nbins, 1, sharex="col", figsize=(10.5, 9.5))
             for iz in range(nbins):
-                zl = (zlims[iz], zlims[iz+1])
+                zl = (zlims[iz], zlims[iz + 1])
                 _, ax = single_delta_plot(files, ax=axes[iz], parameter=par,
                                           zlims=zl)
-                ax.text(0.8, 0.75, "${:3.1f} < z <  {:3.1f}$".format(*zl), transform=ax.transAxes)
+                ax.text(0.8, 0.75, "${:3.1f} < z <  {:3.1f}$".format(*zl),
+                        transform=ax.transAxes)
             [ax.set_xlim(7, 10) for ax in axes]
             axes[0].set_title(tag.replace("\n", ", "))
             pdf.savefig(fig)

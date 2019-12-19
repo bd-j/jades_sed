@@ -21,7 +21,7 @@ pl.rcParams['mathtext.it'] = 'serif:italic'
 
 
 catname = ("/Users/bjohnson/Projects/jades_d2s5/data/"
-           "noisy_spectra/parametric_mist_ckc14.h5")
+           "noisy_spectra/parametric_mist_ckc14_rscale.h5")
 
 
 if __name__ == "__main__":
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     fig.suptitle("Mock={}; Model={}; S/N=DEEP with sizes".format(*ftype.split("_")))
     tfig.suptitle("Mock={}; Model={}; S/N=DEEP with sizes".format(*ftype.split("_")))
-    fig.savefig("figures/mass_sfr_{}.png".format(ftype), dpi=400)
-    tfig.savefig("figures/mass_sfr_truth_{}.png".format(ftype), dpi=400)
+    fig.savefig("figures/mass_sfr_{}.pdf".format(ftype), dpi=400)
+    tfig.savefig("figures/mass_sfr_truth_{}.pdf".format(ftype), dpi=400)
 
     pl.show()
